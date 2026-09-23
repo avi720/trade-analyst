@@ -23,6 +23,7 @@ import {
 import type { TablesUpdate } from '@/lib/db/types'
 import { processExecutions } from '@/lib/ibkr/process-executions'
 import { recomputeActualR } from '@/lib/trade/recompute-actual-r'
+import { mergeTags } from '@/lib/constants/trade-options'
 
 export interface ImportSummary {
   processed: number
@@ -62,11 +63,12 @@ export async function persistManualLegs(
     const annotations = extractAnnotations(leg)
     if (Object.keys(annotations).length === 0) continue
     // Last-leg-wins merge preserves the sequential loop's overwrite semantics —
-    // except tags, which are a set: legs of the same trade contribute a union.
+    // except tags, which are a set: legs of the same trade contribute a union,
+    // capped so it cannot trip Trade_tags_max_10 and sink the whole update.
     const merged = annotationsByTradeId.get(result.tradeId) ?? {}
     const next: TablesUpdate<'Trade'> = { ...merged, ...annotations }
     if (merged.tags && annotations.tags) {
-      next.tags = Array.from(new Set([...merged.tags, ...annotations.tags]))
+      next.tags = mergeTags(merged.tags, annotations.tags)
     }
     annotationsByTradeId.set(result.tradeId, next)
   }

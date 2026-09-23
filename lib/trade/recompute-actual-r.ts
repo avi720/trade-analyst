@@ -8,6 +8,11 @@
  * stop is written we can derive the R-multiple, which feeds the research-tab
  * R metrics (avg R, expectancy, equity curve, R distribution).
  *
+ * The reverse holds too: a stop cleared (or made unusable) on a closed trade
+ * leaves nothing to measure R against, so actualR goes back to null and result
+ * falls back to the $-based classification — exactly what the FIFO close would
+ * have produced with no stop.
+ *
  * Idempotent: when actualR was already computed by FIFO (open + close in separate
  * submissions), recomputing yields the same value.
  */
@@ -17,8 +22,8 @@ import { calcActualR, resultFromR } from './fifo'
 import type { Database } from '@/lib/db/types'
 
 /**
- * Reads the trade, and if it is Closed with a stopPrice set, recomputes and
- * persists actualR + result. No-op for open trades or trades without a stop.
+ * Reads the trade, and if it is Closed, re-derives actualR + result from its
+ * current stopPrice and persists them when they changed. No-op for open trades.
  */
 export async function recomputeActualR(
   admin: SupabaseClient<Database>,
@@ -27,18 +32,20 @@ export async function recomputeActualR(
 ): Promise<void> {
   const { data: t } = await admin
     .from('Trade')
-    .select('status, realizedPnl, avgEntryPrice, stopPrice, totalQuantityOpened')
+    .select('status, realizedPnl, avgEntryPrice, stopPrice, totalQuantityOpened, actualR, result')
     .eq('id', tradeId)
     .eq('userId', userId)
     .maybeSingle()
 
-  if (!t || t.status !== 'Closed' || t.stopPrice == null) return
+  if (!t || t.status !== 'Closed') return
 
   const realizedPnl = t.realizedPnl ?? 0
-  const actualR = calcActualR(realizedPnl, t.avgEntryPrice, t.stopPrice, t.totalQuantityOpened)
-  if (actualR == null) return
-
+  const actualR = t.stopPrice == null
+    ? null
+    : calcActualR(realizedPnl, t.avgEntryPrice, t.stopPrice, t.totalQuantityOpened)
   const result = resultFromR(actualR, realizedPnl)
+
+  if (actualR === t.actualR && result === t.result) return
 
   await admin
     .from('Trade')

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeTags, splitTagString, validateTags, TAG_MAX_COUNT, TAG_MAX_LEN } from '@/lib/constants/trade-options'
+import { normalizeTags, splitTagString, validateTags, mergeTags, TAG_MAX_COUNT, TAG_MAX_LEN } from '@/lib/constants/trade-options'
 import { extractAnnotations, validateLeg, type ManualLeg } from '@/lib/trade/manual-entry'
 
 function leg(over: Partial<ManualLeg> = {}): ManualLeg {
@@ -49,5 +49,18 @@ describe('ManualLeg tags', () => {
     const errs = validateLeg(leg({ tags: Array.from({ length: TAG_MAX_COUNT + 1 }, (_, i) => `t${i}`) }), 0)
     expect(errs.some(e => e.field.endsWith('.tags'))).toBe(true)
     expect(validateLeg(leg({ tags: ['a', 'b'] }), 0).some(e => e.field.endsWith('.tags'))).toBe(false)
+  })
+})
+
+describe('mergeTags', () => {
+  it('unions two legs case-insensitively, first spelling wins', () => {
+    expect(mergeTags(['Gap', 'earnings'], ['gap', 'breakout'])).toEqual(['Gap', 'earnings', 'breakout'])
+  })
+  it('caps the union at TAG_MAX_COUNT so it cannot trip the DB CHECK', () => {
+    const a = Array.from({ length: 8 }, (_, i) => `a${i}`)
+    const b = Array.from({ length: 8 }, (_, i) => `b${i}`)
+    const out = mergeTags(a, b)
+    expect(out).toHaveLength(TAG_MAX_COUNT)
+    expect(out.slice(0, 8)).toEqual(a)
   })
 })

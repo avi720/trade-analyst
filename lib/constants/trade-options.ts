@@ -116,6 +116,17 @@ export function splitTagString(s: string | null | undefined): string[] {
   return s.split(/[,;|]/)
 }
 
+/**
+ * Union of two tag lists for the same trade (e.g. several legs of one import),
+ * in canonical form: deduped case-insensitively, first spelling wins, capped at
+ * TAG_MAX_COUNT — earlier tags are kept. Each list is valid on its own, but
+ * their union can exceed the Trade_tags_max_10 CHECK, which would fail the
+ * whole annotation update for that trade.
+ */
+export function mergeTags(a: readonly string[], b: readonly string[]): string[] {
+  return normalizeTags([...a, ...b]).slice(0, TAG_MAX_COUNT)
+}
+
 // Server-side validation of a (normalized) tag list. Returns null if valid, or an error message.
 export function validateTags(tags: readonly string[] | null | undefined): string | null {
   if (!tags) return null
