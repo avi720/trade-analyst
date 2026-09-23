@@ -95,7 +95,17 @@ export async function PATCH(
     await recomputeActualR(supabase, id, user.id)
   }
 
-  return NextResponse.json({ ok: true })
+  // Hand back the server-derived columns so the caller can show them without
+  // a refetch: actualR/result may have just been recomputed, and plannedR is
+  // DB-generated from the stop/target written above.
+  const { data: derived } = await supabase
+    .from('Trade')
+    .select('actualR, plannedR, result')
+    .eq('id', id)
+    .eq('userId', user.id)
+    .maybeSingle()
+
+  return NextResponse.json({ ok: true, derived })
 }
 
 export async function DELETE(

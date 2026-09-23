@@ -604,6 +604,7 @@ export function TradeSearch({ trades, initialParams }: Props) {
             patchTrade(updated.id, {
               notes: updated.notes,
               setupType: updated.setupType,
+              tags: updated.tags,
               emotionalState: updated.emotionalState,
               executionQuality: updated.executionQuality,
               stopPrice: updated.stopPrice,

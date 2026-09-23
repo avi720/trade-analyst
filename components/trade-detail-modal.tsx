@@ -95,8 +95,15 @@ export function TradeDetailModal({ trade, mode = 'edit', onClose, onSaved }: Pro
         return
       }
 
+      // actualR / result / plannedR are derived server-side from the stop and
+      // target just written — take them from the response, not the stale prop.
+      const { derived } = (await res.json().catch(() => ({}))) as {
+        derived?: Pick<RawTrade, 'actualR' | 'plannedR' | 'result'> | null
+      }
+
       const updated: RawTrade = {
         ...trade,
+        ...(derived ?? {}),
         notes: body.notes as string | null,
         setupType: body.setupType as string | null,
         tags,
