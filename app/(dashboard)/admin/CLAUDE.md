@@ -81,26 +81,5 @@ naive `EXISTS(SELECT ... FROM "User")` form causes. Reuse the helper; don't inli
 failures (JOIN to `User.email`) in a single `Promise.all` under `createAdminClient()`, then
 hands the frozen snapshot to `components/admin/admin-health-dashboard.tsx`.
 
-The three `SECURITY DEFINER STABLE` functions (migration `add_admin_metrics_functions`) are
-described in the `db-schema` skill. What they return:
-
-- `admin_system_metrics()` → one JSON snapshot: users (total / Pro / Free / signups 7d);
-  retention 30/60/90d (`active` = user has an `Order` with `executedAt ≥ now-14d`, denominator
-  = users with `createdAt ≤ now-Nd`); activity (trades total/open/closed/7d, orders total/7d);
-  integrations (active broker connections, pending / failed jobs); broker-sync staleness
-  (`staleSyncConnections` = active connections with `lastSyncAt` NULL or older than 48h,
-  `brokerSyncErrors`, `lastBrokerSyncAt` — migration `add_broker_sync_staleness_metrics`);
-  IBKR success rate 7d (`BrokerEvent` where `source='IBKR_FLEX'`, success =
-  `processingStatus='PROCESSED'`); chat usage 24h/7d (conversations + distinct users on
-  `AIConversation.updatedAt`); `auditFailures24h`.
-- `admin_table_sizes()` → 7 rows `{tableName, sizeBytes}` from `pg_total_relation_size()`.
-- `admin_timeseries(days)` → `{day, signups, trades}` per day, guarded to `[1,365]`, using
-  `generate_series` so zero-activity days show as 0.
-
 `staleSyncConnections` is not a nice-to-have — it is one of the two guards against the
 `SITE_URL` redirect bug recurring. See the `cron-and-workers` skill.
-
-The client dashboard renders card groups (Users / Retention / Activity / Integrations / IBKR /
-Chat / Health), two `recharts` LineCharts (daily signups + daily trades over 30d, reusing the
-axis/tooltip constants from `components/research/shell.tsx`), the table-sizes table and the
-recent-failures table. All numbers use IBM Plex Mono.

@@ -10,7 +10,8 @@ detail, it belongs in a skill.
 
 **Rules** — [`.claude/rules/`](.claude/rules/). Most carry `paths:` frontmatter and load only
 when the matching files are touched (FIFO invariants + concurrency, position-mutation paths,
-`reverse_position` RPC, IBKR date parsing, multi-user/RLS, base URL, client env vars).
+`reverse_position` RPC, IBKR date parsing, multi-user/RLS, base URL, client env vars, AI
+import, auth telemetry).
 `rtl-and-language.md` is unscoped and always loads.
 
 **Skills** — load one of these *before* starting the matching work, not after:
@@ -43,17 +44,7 @@ remove the `/api/cron/*` exclusion from the proxy matcher) and
 
 ## Commands
 
-```bash
-npm run dev                                  # Dev server (http://localhost:3000)
-npm run build                                # Production build (TypeScript gate)
-npm run start                                # Start production server
-npm run lint                                 # ESLint 9 flat config (eslint.config.mjs)
-npm run test                                 # Vitest watch
-npm run test:run                             # Vitest once
-npm run test:run -- __tests__/fifo.test.ts   # Single file
-npm run test:run -- -t "REVERSAL"            # Tests matching name
-npm run db:seed                              # Seed DB (uses .env.local + service-role key)
-```
+`npm run build` is the TypeScript gate; `npm run db:seed` reads `.env.local` with the service-role key.
 
 ## Architecture
 
@@ -118,15 +109,7 @@ and `date-fns parse()` don't work, plus the Flex dual-root quirk.
 ## Manual entry pipeline
 
 `ManualLeg` ([lib/trade/manual-entry.ts](lib/trade/manual-entry.ts)) is the input type for the
-form (`/manual-import`), the Excel import and the AI import:
-
-- **Required** (8): `ticker`, `date` (YYYY-MM-DD), `time` (HH:MM), `side`, `quantity`, `price`,
-  `commission`, `currency`
-- **Optional order-level** (6): `commissionCurrency`, `orderType`, `orderPlacedDate`,
-  `orderPlacedTime`, `broker`, `timezone` (IANA tz for date/time — defaults to UTC)
-- **Optional Trade-level annotations** (6): `setupType`, `emotionalState`, `stopPrice`,
-  `targetPrice`, `notes`, `didRight` (`wouldChange` only makes sense at close and is set via
-  the manual-close flow)
+form (`/manual-import`), the Excel import and the AI import.
 
 `persistManualLegs(legs, userId)` in
 [lib/trade/persist-manual-legs.ts](lib/trade/persist-manual-legs.ts) is the shared persistence
@@ -137,52 +120,20 @@ shifts the instant, so the key has to apply `localToUtcIso`.
 
 ### Position mutations — manual entry opens positions and nothing else
 
-`POST /api/trades/manual` rejects (422, all-or-nothing) any leg touching a trade that was
-already open before the request — scale-in included — and any leg closing/reducing/reversing a
-position opened within the same batch. Enforced by `findForbiddenLegs` in
-[lib/trade/guard-position-mutations.ts](lib/trade/guard-position-mutations.ts), which replays
-the batch through the real `matchExecution`; the form mirrors it client-side via
-`GET /api/trades/open-positions`.
-
-Changing an existing position goes through dedicated routes + modals in the search tab:
-`add-to-position` (SCALE_IN), `reduce-position` (REDUCE, strictly partial), `close` (CLOSE) —
-all gated on `source='manual'` + `status='Open'`. The Excel import has its own commit endpoint
-(`POST /api/trades/import/confirm`) precisely so it is **not** subject to the guard: a
-spreadsheet is one row per execution and carries the closing rows.
-
-Full invariant + exemption list:
-[`.claude/rules/position-mutation-paths.md`](.claude/rules/position-mutation-paths.md).
+Manual entry opens positions and nothing else; changing an existing position goes through the
+add/reduce/close routes, and the Excel/AI import confirm routes are deliberately exempt. Full
+invariant + exemptions: [`.claude/rules/position-mutation-paths.md`](.claude/rules/position-mutation-paths.md).
 
 ### AI custom-Excel import (Pro)
 
 Pro users upload an arbitrary-layout xlsx; Gemini maps or extracts it into `ManualLeg[]`, the
-user reviews an editable preview, and confirm flows through `persistManualLegs`. Modules under
-[lib/trade/ai-import/](lib/trade/ai-import/): `sample-workbook` → `extract` (Gemini cascade
-returning a discriminated `AiMapping`) → `apply-mapping` / `finalize-legs` → `process`
-orchestrates. Two non-obvious constraints:
-
-- **Timezone is never AI-inferred.** It's a required field at upload
-  (`ExcelImportJob.sourceTimezone`), passed as a hard param to `finalizeLegs`. Excel carries no
-  tz; a guess would break FIFO chronology.
-- The job runs **off-Vercel** on a GitHub-Actions worker — see the `cron-and-workers` skill.
+user reviews an editable preview, and confirm flows through `persistManualLegs`. Constraints
+(timezone never AI-inferred, off-Vercel worker): [`.claude/rules/ai-import.md`](.claude/rules/ai-import.md).
 
 ## Auth telemetry
 
-Added after a Google-OAuth signup failed silently and left no trace in PostHog *or*
-`AuditEvent` — [docs/in-progress/AUTH-HARDENING-GEO-GATE.md](docs/in-progress/AUTH-HARDENING-GEO-GATE.md).
-
-- [components/analytics/analytics-identity.tsx](components/analytics/analytics-identity.tsx) is
-  mounted in the **root** layout, not the dashboard layout — the blind spot is users who never
-  reach the dashboard. Idempotent; no-ops without analytics consent.
-- `/auth/callback` appends `reason=exchange_failed` on PKCE failure so `/signup/verified` can
-  tell a genuine email verification from a failed exchange. The page renders the same copy
-  either way, so **without the param the metric is meaningless**.
-- `logAuditEvent` stamps `metadata.country` on **every** event type. `AuditContext.userId` is
-  `string | null` — auth-callback events must pass `null`, because `AuditEvent.userId` has an FK
-  to `User(id)` and those events fire before the `User` row exists.
-- `signup_started` is deliberately **not** logged server-side: it happens in the browser, so
-  capturing it would need a new unauthenticated POST endpoint — new attack surface for a metric
-  PostHog already provides.
+Auth telemetry invariants (root-layout mount, `reason=exchange_failed`, `AuditContext.userId`
+null for auth-callback events): [`.claude/rules/auth-telemetry.md`](.claude/rules/auth-telemetry.md).
 
 ## Phase history
 
