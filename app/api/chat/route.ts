@@ -203,9 +203,10 @@ export async function POST(request: Request) {
   // POST would otherwise widen the scope to the full history.
   const respectFilter = isProTier(tier) ? (body.respectFilter ?? true) : true
   // The dashboard buckets day/hour in the browser's zone; the server's own zone
-  // is UTC, so the aggregates need the user's zone passed in. A missing or
-  // invalid value falls back to an explicit 'UTC' rather than whatever the
-  // runtime happens to be — the tool reports the zone it used either way.
+  // is UTC, so everything the model reads (row timestamps, date filters, the
+  // aggregates) needs the user's zone passed in. A missing or invalid value
+  // falls back to an explicit 'UTC' rather than whatever the runtime happens to
+  // be — the prompt and the day/hour tool name the zone used either way.
   const timeZone = normalizeTimeZone(body.timeZone) ?? 'UTC'
 
   if (!message || typeof message !== 'string' || !message.trim()) {
@@ -245,7 +246,7 @@ export async function POST(request: Request) {
 
   // Probe first: does the projected set fit inline? Only the answer to that
   // decides whether this turn is a plain call or a tool-driven one.
-  const probe = buildChatContext({ trades, mode, stats, filterActive: filterIds !== null })
+  const probe = buildChatContext({ trades, mode, stats, filterActive: filterIds !== null, timeZone })
 
   // Above the budget the answer needs tool-use round-trips, which are a Pro
   // capability. Free tier gets an actionable message rather than a silently
@@ -265,7 +266,7 @@ export async function POST(request: Request) {
 
   const useTools = probe.overThreshold
   const context = useTools
-    ? buildChatContext({ trades, mode, stats, filterActive: filterIds !== null, omitRows: true })
+    ? buildChatContext({ trades, mode, stats, filterActive: filterIds !== null, timeZone, omitRows: true })
     : probe
 
   // P1-D: Gemini 2.5 rejects a request carrying both `googleSearch` and custom
@@ -279,6 +280,7 @@ export async function POST(request: Request) {
     mode,
     toolNames: useTools ? toolNamesForMode(mode) : undefined,
     webSearch,
+    timeZone,
   })
   const model = contextMode === 'full' ? 'gemini-2.5-pro' : 'gemini-2.5-flash'
 

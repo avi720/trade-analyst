@@ -23,6 +23,7 @@
 
 import type { ClosedTrade } from '@/types/trade'
 import type { TradeStats } from '@/lib/utils/calculations'
+import { toZonedIso } from '@/lib/trade/tz'
 
 /**
  * Byte ceiling on the serialized trade array. ~17K tokens.
@@ -67,7 +68,9 @@ function byteLen(s: string): number {
   return encoder.encode(s).length
 }
 
-function projectSmart(t: ChatTrade) {
+// Timestamps go out in the user's zone (with offset), not UTC: the model reads
+// days and hours straight off these strings, and they must match the dashboard.
+function projectSmart(t: ChatTrade, timeZone: string) {
   return {
     ticker: t.ticker,
     direction: t.direction,
@@ -76,22 +79,22 @@ function projectSmart(t: ChatTrade) {
     actualR: t.actualR,
     realizedPnl: t.realizedPnl,
     result: t.result,
-    closedAt: t.closedAt.toISOString(),
+    closedAt: toZonedIso(t.closedAt, timeZone),
   }
 }
 
-function projectFull(t: ChatTrade) {
+function projectFull(t: ChatTrade, timeZone: string) {
   return {
-    ...projectSmart(t),
-    openedAt: t.openedAt.toISOString(),
+    ...projectSmart(t, timeZone),
+    openedAt: toZonedIso(t.openedAt, timeZone),
     plannedR: t.plannedR,
     executionQuality: t.executionQuality,
     emotionalState: t.emotionalState,
   }
 }
 
-export function projectTrade(t: ChatTrade, mode: ChatContextMode) {
-  return mode === 'full' ? projectFull(t) : projectSmart(t)
+export function projectTrade(t: ChatTrade, mode: ChatContextMode, timeZone: string) {
+  return mode === 'full' ? projectFull(t, timeZone) : projectSmart(t, timeZone)
 }
 
 // Long floats bloat the payload for no analytical gain — the model is reading
@@ -117,6 +120,8 @@ export function buildChatContext(params: {
   mode: ChatContextMode
   stats: TradeStats
   filterActive: boolean
+  /** The user's IANA timezone — every timestamp in the rows is rendered in it. */
+  timeZone: string
   budgetBytes?: number
   /**
    * Drop the rows entirely and keep only the KPI baseline. Set once the tool
@@ -126,12 +131,12 @@ export function buildChatContext(params: {
    */
   omitRows?: boolean
 }): ChatContextResult {
-  const { trades, mode, stats, filterActive, omitRows = false } = params
+  const { trades, mode, stats, filterActive, timeZone, omitRows = false } = params
   const budget = params.budgetBytes ?? CONTEXT_BUDGET_BYTES
 
   // Most recent first, so a truncated window is the useful window.
   const sorted = [...trades].sort((a, b) => b.closedAt.getTime() - a.closedAt.getTime())
-  const serialized = sorted.map(t => JSON.stringify(projectTrade(t, mode)))
+  const serialized = sorted.map(t => JSON.stringify(projectTrade(t, mode, timeZone)))
 
   // 2 = the enclosing brackets; +1 per row after the first = the comma.
   let totalBytes = 2

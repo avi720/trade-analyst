@@ -45,24 +45,24 @@ describe('projectTrade — per-mode field gate', () => {
   const t = makeTrade({ id: 'a' })
 
   it('smart mode exposes exactly the 8 spec fields', () => {
-    expect(Object.keys(projectTrade(t, 'smart')).sort()).toEqual(
+    expect(Object.keys(projectTrade(t, 'smart', 'UTC')).sort()).toEqual(
       ['actualR', 'closedAt', 'direction', 'realizedPnl', 'result', 'setup', 'tags', 'ticker'],
     )
   })
 
   it('smart mode withholds openedAt, executionQuality and emotionalState', () => {
-    const p = projectTrade(t, 'smart') as Record<string, unknown>
+    const p = projectTrade(t, 'smart', 'UTC') as Record<string, unknown>
     expect(p.openedAt).toBeUndefined()
     expect(p.executionQuality).toBeUndefined()
     expect(p.emotionalState).toBeUndefined()
   })
 
   it('smart mode includes realizedPnl (P1-A)', () => {
-    expect((projectTrade(t, 'smart') as Record<string, unknown>).realizedPnl).toBe(300)
+    expect((projectTrade(t, 'smart', 'UTC') as Record<string, unknown>).realizedPnl).toBe(300)
   })
 
   it('full mode adds openedAt, plannedR, executionQuality and emotionalState', () => {
-    expect(Object.keys(projectTrade(t, 'full')).sort()).toEqual(
+    expect(Object.keys(projectTrade(t, 'full', 'UTC')).sort()).toEqual(
       [
         'actualR', 'closedAt', 'direction', 'emotionalState', 'executionQuality',
         'openedAt', 'plannedR', 'realizedPnl', 'result', 'setup', 'tags', 'ticker',
@@ -72,7 +72,7 @@ describe('projectTrade — per-mode field gate', () => {
 
   it('neither mode ever exposes free-text or raw price columns', () => {
     for (const mode of ['smart', 'full'] as const) {
-      const keys = Object.keys(projectTrade(t, mode))
+      const keys = Object.keys(projectTrade(t, mode, 'UTC'))
       for (const forbidden of ['notes', 'didRight', 'wouldChange', 'avgEntryPrice', 'stopPrice', 'id']) {
         expect(keys).not.toContain(forbidden)
       }
@@ -83,6 +83,7 @@ describe('projectTrade — per-mode field gate', () => {
 describe('buildChatContext — below the budget', () => {
   const trades = makeMany(5)
   const result = buildChatContext({
+    timeZone: 'UTC',
     trades,
     mode: 'smart',
     stats: calcStats(trades),
@@ -110,6 +111,7 @@ describe('buildChatContext — below the budget', () => {
 
   it('reports filtered scope when a filter is active', () => {
     const filtered = buildChatContext({
+      timeZone: 'UTC',
       trades, mode: 'smart', stats: calcStats(trades), filterActive: true,
     })
     expect(filtered.contextString).toContain('מסונן לפי המסננים הפעילים')
@@ -120,6 +122,7 @@ describe('buildChatContext — above the budget', () => {
   const trades = makeMany(400)
   const budget = 4 * 1024
   const result = buildChatContext({
+    timeZone: 'UTC',
     trades,
     mode: 'smart',
     stats: calcStats(trades),
@@ -159,6 +162,7 @@ describe('buildChatContext — above the budget', () => {
 describe('buildChatContext — omitRows (tool-driven turn)', () => {
   const trades = makeMany(400)
   const result = buildChatContext({
+    timeZone: 'UTC',
     trades,
     mode: 'full',
     stats: calcStats(trades),
@@ -190,6 +194,7 @@ describe('buildChatContext — omitRows (tool-driven turn)', () => {
   it('omits rows even for a small set when asked', () => {
     const small = makeMany(3)
     const r = buildChatContext({
+      timeZone: 'UTC',
       trades: small, mode: 'smart', stats: calcStats(small), filterActive: false, omitRows: true,
     })
     expect(r.includedCount).toBe(0)
@@ -201,8 +206,8 @@ describe('buildChatContext — budget boundary', () => {
   it('full mode crosses the threshold at a lower trade count than smart', () => {
     const trades = makeMany(300)
     const stats = calcStats(trades)
-    const smart = buildChatContext({ trades, mode: 'smart', stats, filterActive: false })
-    const full = buildChatContext({ trades, mode: 'full', stats, filterActive: false })
+    const smart = buildChatContext({ timeZone: 'UTC', trades, mode: 'smart', stats, filterActive: false })
+    const full = buildChatContext({ timeZone: 'UTC', trades, mode: 'full', stats, filterActive: false })
     expect(full.totalBytes).toBeGreaterThan(smart.totalBytes)
   })
 
@@ -210,6 +215,7 @@ describe('buildChatContext — budget boundary', () => {
     expect(CONTEXT_BUDGET_BYTES).toBe(61440)
     const trades = makeMany(50)
     const result = buildChatContext({
+      timeZone: 'UTC',
       trades, mode: 'smart', stats: calcStats(trades), filterActive: false,
     })
     expect(result.totalBytes).toBeLessThan(CONTEXT_BUDGET_BYTES)
@@ -218,11 +224,47 @@ describe('buildChatContext — budget boundary', () => {
 
   it('handles an empty trade set without throwing', () => {
     const result = buildChatContext({
+      timeZone: 'UTC',
       trades: [], mode: 'full', stats: calcStats([]), filterActive: true,
     })
     expect(result.totalCount).toBe(0)
     expect(result.includedCount).toBe(0)
     expect(result.overThreshold).toBe(false)
     expect(result.contextString).toContain('[]')
+  })
+})
+
+// The model reads days and hours straight off these strings, so they are
+// rendered in the user's zone — the dashboard's clock — not in UTC.
+describe('projectTrade — user timezone', () => {
+  // Saturday 23:30 UTC = Sunday 01:30 in Israel (IST, UTC+2).
+  const t = makeTrade({
+    id: 'tz',
+    openedAt: new Date('2026-01-03T23:30:00Z'),
+    closedAt: new Date('2026-01-04T08:00:00Z'),
+  })
+
+  it('full mode renders openedAt and closedAt in the user zone with offset', () => {
+    const p = projectTrade(t, 'full', 'Asia/Jerusalem') as Record<string, unknown>
+    expect(p.openedAt).toBe('2026-01-04T01:30:00+02:00')
+    expect(p.closedAt).toBe('2026-01-04T10:00:00+02:00')
+  })
+
+  it('smart mode renders closedAt in the user zone too', () => {
+    const p = projectTrade(t, 'smart', 'Asia/Jerusalem') as Record<string, unknown>
+    expect(p.closedAt).toBe('2026-01-04T10:00:00+02:00')
+  })
+
+  it('the rendered strings still parse back to the same instant', () => {
+    const p = projectTrade(t, 'full', 'America/New_York') as unknown as { openedAt: string; closedAt: string }
+    expect(p.openedAt).toBe('2026-01-03T18:30:00-05:00')
+    expect(Date.parse(p.openedAt)).toBe(t.openedAt.getTime())
+    expect(Date.parse(p.closedAt)).toBe(t.closedAt.getTime())
+  })
+
+  it('buildChatContext passes the zone through to the inline rows', () => {
+    const r = buildChatContext({ timeZone: 'Asia/Jerusalem', trades: [t], mode: 'full', stats: calcStats([t]), filterActive: false })
+    expect(r.contextString).toContain('"openedAt":"2026-01-04T01:30:00+02:00"')
+    expect(r.contextString).not.toContain('2026-01-03T23:30')
   })
 })

@@ -22,8 +22,9 @@ is duplicated and kept in lockstep.
 - "Honored the stop" allows `STOP_DISCIPLINE_TOLERANCE_R` past −1R for commissions and slippage.
 - `avgR` covers trades with a non-null `actualR` only; stopless trades are still classified
   win/loss by money.
-- Day-of-week and hour charts bucket by **entry** time (`openedAt`) in the **runtime's local
-  timezone** — the browser's on the dashboard.
+- Day-of-week and hour charts bucket by **entry** time (`openedAt`). With no `timeZone` option
+  that is the **runtime's local timezone** — the browser's on the dashboard. Server callers
+  (the chat route) must pass the user's zone explicitly: the server's local zone is UTC.
 - Tag stats are multi-membership: a trade counts toward every tag it carries, and there is no
   "untagged" bucket.
 

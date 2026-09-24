@@ -35,6 +35,15 @@ const FULL_CAPABILITIES = `מה זמין לך במצב "עומק":
 כל מה שיש במצב "חכם", ובנוסף שעת הפתיחה, R מתוכנן (יחס הסיכוי/סיכון מהתוכנית — יעד מול סטופ), ציון איכות הביצוע, והמצב הרגשי.
 שדות הטקסט החופשי (הערות, "מה עשיתי נכון", "מה הייתי משנה") אינם נשלחים אליך אוטומטית כי הם ארוכים מאוד — משוך אותם דרך הכלי queryTrades רק כששאלה באמת דורשת אותם.`
 
+// Every timestamp the model reads (inline rows, queryTrades rows) is rendered in
+// the user's zone, and date-only filter bounds are read in it too. Saying so
+// keeps the model from "correcting" local times it assumes are UTC.
+function timeZoneRules(timeZone: string): string {
+  return `שעון:
+אזור הזמן של המשתמש הוא ${timeZone}. כל חותמות הזמן בנתונים ובתוצאות הכלים כבר מוצגות בשעון המקומי שלו, עם ההפרש מ-UTC בסוף (למשל +02:00) — זה אותו שעון שמוצג לו בלוח התחקור.
+כשאתה מדבר על ימים ושעות, השתמש בשעה המקומית כפי שהיא מופיעה, בלי להמיר ל-UTC. בסינון לפי תאריך בכלים, תאריך בלבד (YYYY-MM-DD) הוא יום מלא בשעון המשתמש.`
+}
+
 function toolRules(toolNames: string[]): string {
   return `כלים:
 עומדים לרשותך הכלים הבאים: ${toolNames.join(', ')}.
@@ -63,8 +72,10 @@ export function buildSystemPrompt(params: {
   mode: ChatContextMode
   toolNames?: string[]
   webSearch?: boolean
+  /** The user's IANA timezone — the one the context's timestamps are rendered in. */
+  timeZone: string
 }): string {
-  const { context, mode, toolNames, webSearch = false } = params
+  const { context, mode, toolNames, webSearch = false, timeZone } = params
   const hasTools = Boolean(toolNames && toolNames.length > 0)
 
   const sections = [
@@ -87,6 +98,7 @@ export function buildSystemPrompt(params: {
     sections.push('', WEB_DISABLED_WITH_TOOLS)
   }
 
+  sections.push('', timeZoneRules(timeZone))
   sections.push('', 'הנתונים הנוכחיים:', context)
   return sections.join('\n')
 }

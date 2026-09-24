@@ -21,6 +21,7 @@
 
 import { Type } from '@google/genai'
 import type { ChatContextMode, ChatTrade } from '@/lib/chat/context-builder'
+import { localToUtcIso, toZonedIso } from '@/lib/trade/tz'
 import {
   QUERY_TRADES_DEFAULT_LIMIT,
   QUERY_TRADES_MAX_LIMIT,
@@ -132,17 +133,39 @@ function asRecord(v: unknown): Record<string, unknown> {
   return v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+// A date-time with no `Z` / `±HH:MM` suffix. `new Date()` would read it in the
+// runtime's zone — UTC on the server — rather than the user's.
+const LOCAL_DATE_TIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/
+
+function nextDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10)
+}
+
 /**
- * Bound parsing for the date filters. A bare `YYYY-MM-DD` is expanded to cover
- * the whole UTC day so `closedTo: '2026-03-02'` includes trades closed that
- * afternoon — an inclusive-bound reading is what a user means by "until".
+ * Bound parsing for the date filters, in the user's timezone — the one every
+ * row timestamp is rendered in. A bare `YYYY-MM-DD` covers that whole local
+ * day, so `closedTo: '2026-03-02'` includes trades closed that evening — an
+ * inclusive-bound reading is what a user means by "until". A date-time without
+ * an offset is local wall time; one with `Z` / `±HH:MM` is taken as-is.
  */
-function parseBound(v: unknown, edge: 'start' | 'end'): number | undefined {
+function parseBound(v: unknown, edge: 'start' | 'end', timeZone: string): number | undefined {
   const s = asString(v)
   if (!s) return undefined
-  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s)
-  const iso = dateOnly ? `${s}T${edge === 'start' ? '00:00:00.000' : '23:59:59.999'}Z` : s
-  const ms = new Date(iso).getTime()
+  let ms: number
+  if (DATE_ONLY.test(s)) {
+    ms = edge === 'start'
+      ? Date.parse(localToUtcIso(s, '00:00', timeZone))
+      : Date.parse(localToUtcIso(nextDay(s), '00:00', timeZone)) - 1
+  } else {
+    const local = LOCAL_DATE_TIME.exec(s)
+    ms = local
+      ? Date.parse(localToUtcIso(local[1], local[2], timeZone)) +
+        Number(local[3] ?? 0) * 1000 +
+        Number((local[4] ?? '0').padEnd(3, '0'))
+      : new Date(s).getTime()
+  }
   return Number.isNaN(ms) ? undefined : ms
 }
 
@@ -187,7 +210,7 @@ function parseFilters(raw: unknown, mode: ChatContextMode): { filters: Filters; 
   return { filters, dropped }
 }
 
-function matches(t: ChatTrade, f: Filters): boolean {
+function matches(t: ChatTrade, f: Filters, timeZone: string): boolean {
   if (f.ticker && !t.ticker.toLowerCase().includes(f.ticker.toLowerCase())) return false
   if (f.direction && t.direction !== f.direction) return false
   if (f.result !== undefined && t.result !== f.result) return false
@@ -202,14 +225,14 @@ function matches(t: ChatTrade, f: Filters): boolean {
   if (f.minPnl !== undefined && t.realizedPnl < f.minPnl) return false
   if (f.maxPnl !== undefined && t.realizedPnl > f.maxPnl) return false
 
-  const closedFrom = parseBound(f.closedFrom, 'start')
+  const closedFrom = parseBound(f.closedFrom, 'start', timeZone)
   if (closedFrom !== undefined && t.closedAt.getTime() < closedFrom) return false
-  const closedTo = parseBound(f.closedTo, 'end')
+  const closedTo = parseBound(f.closedTo, 'end', timeZone)
   if (closedTo !== undefined && t.closedAt.getTime() > closedTo) return false
 
-  const openedFrom = parseBound(f.openedFrom, 'start')
+  const openedFrom = parseBound(f.openedFrom, 'start', timeZone)
   if (openedFrom !== undefined && t.openedAt.getTime() < openedFrom) return false
-  const openedTo = parseBound(f.openedTo, 'end')
+  const openedTo = parseBound(f.openedTo, 'end', timeZone)
   if (openedTo !== undefined && t.openedAt.getTime() > openedTo) return false
 
   return true
@@ -247,7 +270,7 @@ function sortTrades(trades: ChatTrade[], by: OrderBy, desc: boolean): ChatTrade[
     .map(x => x.t)
 }
 
-function projectRow(t: ChatTrade, fields: FieldName[]): Record<string, unknown> {
+function projectRow(t: ChatTrade, fields: FieldName[], timeZone: string): Record<string, unknown> {
   const row: Record<string, unknown> = {}
   for (const f of fields) {
     switch (f) {
@@ -258,8 +281,9 @@ function projectRow(t: ChatTrade, fields: FieldName[]): Record<string, unknown> 
       case 'actualR': row.actualR = t.actualR; break
       case 'realizedPnl': row.realizedPnl = t.realizedPnl; break
       case 'result': row.result = t.result; break
-      case 'closedAt': row.closedAt = t.closedAt.toISOString(); break
-      case 'openedAt': row.openedAt = t.openedAt.toISOString(); break
+      // User's zone, like the inline context rows — see toZonedIso.
+      case 'closedAt': row.closedAt = toZonedIso(t.closedAt, timeZone); break
+      case 'openedAt': row.openedAt = toZonedIso(t.openedAt, timeZone); break
       case 'plannedR': row.plannedR = t.plannedR; break
       case 'executionQuality': row.executionQuality = t.executionQuality; break
       case 'emotionalState': row.emotionalState = t.emotionalState; break
@@ -287,10 +311,10 @@ const filtersSchema = {
     maxR: { type: Type.NUMBER, description: 'actualR מקסימלי. טרייד ללא סטופ לעולם לא יתאים' },
     minPnl: { type: Type.NUMBER, description: 'realizedPnl מינימלי' },
     maxPnl: { type: Type.NUMBER, description: 'realizedPnl מקסימלי' },
-    closedFrom: { type: Type.STRING, description: 'תאריך/זמן ISO — כולל את הגבול' },
-    closedTo: { type: Type.STRING, description: 'תאריך/זמן ISO — כולל את הגבול' },
-    openedFrom: { type: Type.STRING, description: 'תאריך/זמן ISO. זמין רק במצב עומק (Pro)' },
-    openedTo: { type: Type.STRING, description: 'תאריך/זמן ISO. זמין רק במצב עומק (Pro)' },
+    closedFrom: { type: Type.STRING, description: 'תאריך/זמן ISO בשעון המשתמש — כולל את הגבול. תאריך בלבד = מתחילת אותו יום' },
+    closedTo: { type: Type.STRING, description: 'תאריך/זמן ISO בשעון המשתמש — כולל את הגבול. תאריך בלבד = עד סוף אותו יום' },
+    openedFrom: { type: Type.STRING, description: 'תאריך/זמן ISO בשעון המשתמש. זמין רק במצב עומק (Pro)' },
+    openedTo: { type: Type.STRING, description: 'תאריך/זמן ISO בשעון המשתמש. זמין רק במצב עומק (Pro)' },
   },
 }
 
@@ -367,9 +391,9 @@ export const queryTradesTool: ChatTool = {
     const rawOffset = asNumber(args.offset)
     const offset = rawOffset === undefined ? 0 : Math.max(0, Math.floor(rawOffset))
 
-    const matchedTrades = ctx.trades.filter(t => matches(t, filters))
+    const matchedTrades = ctx.trades.filter(t => matches(t, filters, ctx.timeZone))
     const page = sortTrades(matchedTrades, orderBy, desc).slice(offset, offset + limit)
-    const rows = page.map(t => projectRow(t, fields))
+    const rows = page.map(t => projectRow(t, fields, ctx.timeZone))
 
     // --- free text: only for the page we are about to return ---
     const wantedFreeText = fields.filter(isFreeText)
