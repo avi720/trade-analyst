@@ -34,6 +34,12 @@ export interface ToolContext {
   mode: ChatContextMode
   fetchFreeText: FetchFreeText
   /**
+   * The user's IANA timezone (validated by the route). `aggregates()` buckets
+   * day/hour in it, so the numbers match the dashboard, which runs in the
+   * user's browser.
+   */
+  timeZone: string
+  /**
    * Lazily-computed single-walk aggregates over `trades`. Memoized per turn so
    * three aggregation calls in one conversation walk the array once, not thrice.
    */

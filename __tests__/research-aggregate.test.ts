@@ -133,3 +133,35 @@ describe('computeResearchAggregates — golden regression', () => {
     expect(agg.holdOther).toEqual(allHold.filter(p => p.result !== 'Win' && p.result !== 'Loss'))
   })
 })
+
+// The chat route runs this server-side, where the runtime zone is UTC, so it
+// passes the user's zone explicitly. These pin that path to the browser one.
+describe('computeResearchAggregates — explicit timeZone', () => {
+  const runtimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+  it('the runtime zone passed explicitly reproduces the default (browser) buckets', () => {
+    const implicit = computeResearchAggregates(fixture)
+    const explicit = computeResearchAggregates(fixture, { timeZone: runtimeZone })
+    expect(explicit.dayofweek).toEqual(implicit.dayofweek)
+    expect(explicit.hour).toEqual(implicit.hour)
+    expect(explicit).toEqual(implicit)
+  })
+
+  // Saturday 23:30 UTC is already Sunday in Israel: 01:30 in winter (IST, +2),
+  // 02:30 in summer (IDT, +3). Built from UTC instants so the host zone is irrelevant.
+  it.each([
+    ['winter (IST, UTC+2)', '2026-01-03T23:30:00Z', 1],
+    ['summer (IDT, UTC+3)', '2026-06-06T23:30:00Z', 2],
+  ])('Saturday 23:30 UTC in %s → Sunday in Asia/Jerusalem', (_label, iso, expectedHour) => {
+    const t = makeTrade({ id: 'tz', openedAt: new Date(iso), closedAt: new Date(iso), realizedPnl: 100 })
+
+    const il = computeResearchAggregates([t], { timeZone: 'Asia/Jerusalem' })
+    expect(il.dayofweek[0]).toEqual({ day: 'ראשון', totalPnl: 100, tradeCount: 1 })
+    expect(il.dayofweek[6].tradeCount).toBe(0)
+    expect(il.hour).toEqual([{ hour: expectedHour, totalPnl: 100, tradeCount: 1 }])
+
+    const utc = computeResearchAggregates([t], { timeZone: 'UTC' })
+    expect(utc.dayofweek[6]).toEqual({ day: 'שבת', totalPnl: 100, tradeCount: 1 })
+    expect(utc.hour).toEqual([{ hour: 23, totalPnl: 100, tradeCount: 1 }])
+  })
+})

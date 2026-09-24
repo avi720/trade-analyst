@@ -171,6 +171,9 @@ export function ChatSidebar({ isPro = false }: { isPro?: boolean }) {
           // only the in-scope trade IDs, so Pro mode gets it too.
           respectFilter,
           contextData,
+          // The server runs in UTC; without this, day/hour aggregates would
+          // disagree with the dashboard charts, which bucket in this zone.
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       })
 

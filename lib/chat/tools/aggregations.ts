@@ -249,6 +249,7 @@ export const getDayHourBreakdown: ChatTool = {
       'Server-computed P&L by day of week and by hour of day. ' +
       'IMPORTANT: both are bucketed by the trade ENTRY time (when the position was opened), not by the exit time. ' +
       'Say so when you report these — "the days you enter trades", not "the days you close them". ' +
+      'Days and hours are in the user\'s local timezone, named in the timeZone field — the same clock as the research dashboard. ' +
       'byDayOfWeek always returns all seven days in Hebrew, Sunday first, including days with zero trades. ' +
       'byHour returns only hours (0-23) that actually have trades.',
     parameters: NO_PARAMS,
@@ -256,6 +257,7 @@ export const getDayHourBreakdown: ChatTool = {
   execute(_args: Record<string, unknown>, ctx: ToolContext) {
     const agg = ctx.aggregates()
     return {
+      timeZone: ctx.timeZone,
       byDayOfWeek: agg.dayofweek.map(d => ({
         day: d.day,
         totalPnl: round4(d.totalPnl),

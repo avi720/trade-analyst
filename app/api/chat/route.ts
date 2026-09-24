@@ -27,6 +27,7 @@ import { buildSystemPrompt } from '@/lib/chat/system-prompt'
 import { buildToolRuntime, toolNamesForMode } from '@/lib/chat/tools'
 import type { TradeFreeText } from '@/lib/chat/tools/types'
 import type { Json } from '@/lib/db/types'
+import { normalizeTimeZone } from '@/lib/trade/tz'
 
 type StoredMessage = {
   role: 'user' | 'assistant'
@@ -187,6 +188,7 @@ export async function POST(request: Request) {
     contextMode: 'smart' | 'full'
     respectFilter?: boolean
     contextData?: Record<string, unknown>
+    timeZone?: unknown
   }
 
   try {
@@ -200,6 +202,11 @@ export async function POST(request: Request) {
   // the toggle for Free, but the UI is not the enforcement point — a crafted
   // POST would otherwise widen the scope to the full history.
   const respectFilter = isProTier(tier) ? (body.respectFilter ?? true) : true
+  // The dashboard buckets day/hour in the browser's zone; the server's own zone
+  // is UTC, so the aggregates need the user's zone passed in. A missing or
+  // invalid value falls back to an explicit 'UTC' rather than whatever the
+  // runtime happens to be — the tool reports the zone it used either way.
+  const timeZone = normalizeTimeZone(body.timeZone) ?? 'UTC'
 
   if (!message || typeof message !== 'string' || !message.trim()) {
     return NextResponse.json({ error: 'Message is required' }, { status: 400 })
@@ -301,7 +308,8 @@ export async function POST(request: Request) {
       const runtime = buildToolRuntime(mode, {
         trades,
         mode,
-        aggregates: () => (cached ??= computeResearchAggregates(trades)),
+        timeZone,
+        aggregates: () => (cached ??= computeResearchAggregates(trades, { timeZone })),
         fetchFreeText: ids => fetchFreeText(supabase, user.id, ids),
       })
 
