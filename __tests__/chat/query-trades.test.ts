@@ -76,6 +76,7 @@ function makeCtx(
   return {
     trades,
     mode,
+    timeZone: 'UTC',
     fetchFreeText,
     // Not exercised by queryTrades — the aggregation tools own this.
     aggregates: () => ({}) as ResearchAggregates,

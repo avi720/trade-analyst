@@ -15,6 +15,7 @@
 import type { ClosedTrade } from '@/types/trade'
 import { STOP_DISCIPLINE_TOLERANCE_R, type TradeStats, type EquityPoint, type RBin, type SetupStat, type TagStat } from './calculations'
 import type { TickerStat, HoldTimePoint, DayStat, HourStat } from './research-charts'
+import { zonedDayHour } from '@/lib/trade/tz'
 
 // Kept in lockstep with calculations.ts R_BINS.
 // Left-inclusive [min, max) — same semantics as the reference impl.
@@ -71,9 +72,23 @@ interface HourBucket {
   tradeCount: number
 }
 
+export interface ResearchAggregateOptions {
+  /**
+   * IANA timezone for the day-of-week / hour buckets. Omitted = the runtime's
+   * local zone (`getDay()` / `getHours()`), which is what the dashboard wants
+   * in the browser. Server callers must pass the user's zone explicitly — the
+   * server's local zone is UTC, not the user's.
+   */
+  timeZone?: string
+}
+
 // Single walk. Returns the exact same shapes as the original helpers so the
 // dashboard's downstream consumers don't need to change.
-export function computeResearchAggregates(trades: ClosedTrade[]): ResearchAggregates {
+export function computeResearchAggregates(
+  trades: ClosedTrade[],
+  options: ResearchAggregateOptions = {},
+): ResearchAggregates {
+  const { timeZone } = options
   // ── Empty short-circuit — mirrors calcStats' empty guard. ──────────────────
   if (trades.length === 0) {
     return {
@@ -215,13 +230,20 @@ export function computeResearchAggregates(trades: ClosedTrade[]): ResearchAggreg
 
       // pnlByDayOfWeek + pnlByHour both guard on realizedPnl != null.
       // Both bucket by ENTRY time (openedAt) — entry timing is the strategy
-      // signal. Both use browser-local getDay()/getHours() — carried through unchanged.
-      const dayIdx = t.openedAt.getDay()
+      // signal. Without a timeZone both use runtime-local getDay()/getHours(),
+      // exactly like the reference helpers.
+      let dayIdx: number
+      let hourNum: number
+      if (timeZone) {
+        ({ day: dayIdx, hour: hourNum } = zonedDayHour(t.openedAt, timeZone))
+      } else {
+        dayIdx = t.openedAt.getDay()
+        hourNum = t.openedAt.getHours()
+      }
       const dayStat = dayStats[dayIdx]
       dayStat.totalPnl += pnl
       dayStat.tradeCount++
 
-      const hourNum = t.openedAt.getHours()
       const existingHour = hourMap.get(hourNum)
       if (existingHour) {
         existingHour.totalPnl += pnl

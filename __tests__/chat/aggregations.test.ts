@@ -50,13 +50,23 @@ function makeTrade(over: Partial<ChatTrade> & { id: string }): ChatTrade {
   }
 }
 
-function makeCtx(trades: ChatTrade[], mode: ChatContextMode = 'full'): ToolContext {
+// Defaults to the runtime zone, so the fixture's local-time buckets (and the
+// parity block's default-zone `computeResearchAggregates`) line up with what
+// the route's explicit-timeZone path produces.
+const RUNTIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+function makeCtx(
+  trades: ChatTrade[],
+  mode: ChatContextMode = 'full',
+  timeZone: string = RUNTIME_ZONE,
+): ToolContext {
   let cached: ResearchAggregates | null = null
   return {
     trades,
     mode,
+    timeZone,
     fetchFreeText: async () => new Map(),
-    aggregates: () => (cached ??= computeResearchAggregates(trades)),
+    aggregates: () => (cached ??= computeResearchAggregates(trades, { timeZone })),
   }
 }
 
@@ -159,6 +169,27 @@ describe('parity with computeResearchAggregates', () => {
 
   it('the tool description states the entry-time bucketing so the model reports it right', () => {
     expect(getDayHourBreakdown.declaration.description).toMatch(/ENTRY time/)
+  })
+
+  // The route runs in UTC; the dashboard runs in the user's browser. The tool
+  // must bucket in the user's zone and say which zone it used.
+  it('getDayHourBreakdown buckets in ctx.timeZone and reports it', () => {
+    // Saturday 23:30 UTC = Sunday 01:30 in Israel (IST, winter).
+    const t = makeTrade({ id: 'tz', openedAt: new Date('2026-01-03T23:30:00Z'), closedAt: new Date('2026-01-04T01:00:00Z'), realizedPnl: 80 })
+
+    const il = getDayHourBreakdown.execute({}, makeCtx([t], 'full', 'Asia/Jerusalem')) as {
+      timeZone: string
+      byDayOfWeek: Array<{ day: string; tradeCount: number }>
+      byHour: Array<{ hour: number; totalPnl: number; tradeCount: number }>
+    }
+    expect(il.timeZone).toBe('Asia/Jerusalem')
+    expect(il.byDayOfWeek[0]).toMatchObject({ day: 'ראשון', tradeCount: 1 })
+    expect(il.byHour).toEqual([{ hour: 1, totalPnl: 80, tradeCount: 1 }])
+
+    const utc = getDayHourBreakdown.execute({}, makeCtx([t], 'full', 'UTC')) as typeof il
+    expect(utc.timeZone).toBe('UTC')
+    expect(utc.byDayOfWeek[6]).toMatchObject({ day: 'שבת', tradeCount: 1 })
+    expect(utc.byHour).toEqual([{ hour: 23, totalPnl: 80, tradeCount: 1 }])
   })
 })
 

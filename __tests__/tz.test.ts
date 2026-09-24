@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { localToUtcIso, toUtcPreview } from '../lib/trade/tz'
+import { localToUtcIso, toUtcPreview, normalizeTimeZone, zonedDayHour } from '../lib/trade/tz'
 
 describe('localToUtcIso', () => {
   it('UTC passthrough — no offset applied', () => {
@@ -56,5 +56,55 @@ describe('toUtcPreview', () => {
   it('returns HH:MM UTC for Israel winter', () => {
     const preview = toUtcPreview('2026-01-15', '16:30', 'Asia/Jerusalem')
     expect(preview).toBe('14:30 UTC')
+  })
+})
+
+describe('normalizeTimeZone', () => {
+  it('accepts valid IANA names', () => {
+    expect(normalizeTimeZone('Asia/Jerusalem')).toBe('Asia/Jerusalem')
+    expect(normalizeTimeZone('UTC')).toBe('UTC')
+    expect(normalizeTimeZone('America/New_York')).toBe('America/New_York')
+  })
+
+  it('returns the canonical casing', () => {
+    expect(normalizeTimeZone('asia/jerusalem')).toBe('Asia/Jerusalem')
+  })
+
+  it('rejects unknown names, non-strings, empty and oversized input', () => {
+    expect(normalizeTimeZone('Mars/Olympus_Mons')).toBeNull()
+    expect(normalizeTimeZone(undefined)).toBeNull()
+    expect(normalizeTimeZone(null)).toBeNull()
+    expect(normalizeTimeZone(3)).toBeNull()
+    expect(normalizeTimeZone({})).toBeNull()
+    expect(normalizeTimeZone('')).toBeNull()
+    expect(normalizeTimeZone('A'.repeat(65))).toBeNull()
+  })
+})
+
+describe('zonedDayHour', () => {
+  it('Saturday 23:30 UTC → Sunday 01:30 in Israel winter (IST, UTC+2)', () => {
+    expect(zonedDayHour(new Date('2026-01-03T23:30:00Z'), 'Asia/Jerusalem')).toEqual({ day: 0, hour: 1 })
+  })
+
+  it('Saturday 23:30 UTC → Sunday 02:30 in Israel summer (IDT, UTC+3)', () => {
+    expect(zonedDayHour(new Date('2026-06-06T23:30:00Z'), 'Asia/Jerusalem')).toEqual({ day: 0, hour: 2 })
+  })
+
+  it('UTC reads the instant as-is', () => {
+    expect(zonedDayHour(new Date('2026-01-03T23:30:00Z'), 'UTC')).toEqual({ day: 6, hour: 23 })
+  })
+
+  it('midnight is hour 0, never 24', () => {
+    expect(zonedDayHour(new Date('2026-01-04T00:00:00Z'), 'UTC')).toEqual({ day: 0, hour: 0 })
+    expect(zonedDayHour(new Date('2026-01-03T22:00:00Z'), 'Asia/Jerusalem')).toEqual({ day: 0, hour: 0 })
+  })
+
+  it('matches getDay()/getHours() for the runtime zone across a full week of hours', () => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const start = Date.UTC(2026, 2, 22) // spans the late-March DST switches (IL + EU)
+    for (let h = 0; h < 24 * 14; h++) {
+      const date = new Date(start + h * 3_600_000)
+      expect(zonedDayHour(date, zone)).toEqual({ day: date.getDay(), hour: date.getHours() })
+    }
   })
 })
