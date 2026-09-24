@@ -2,7 +2,7 @@
 
 Operational procedures for incidents and routine maintenance. Each runbook is self-contained: read it, follow the steps, you're done. Last updated: 2026-08-17.
 
-For background on the architecture, read [`CLAUDE.md`](../CLAUDE.md). For security context, read [`docs/SECURITY-AUDIT.md`](SECURITY-AUDIT.md).
+For background on the architecture, read [`AGENTS.md`](../AGENTS.md). For security context, read [`docs/SECURITY-AUDIT.md`](SECURITY-AUDIT.md).
 
 ---
 

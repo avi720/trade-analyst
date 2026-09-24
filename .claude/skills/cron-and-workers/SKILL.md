@@ -10,9 +10,9 @@ inside Postgres. There are no Vercel Cron entries.
 
 ## Backfill
 
-`POST /api/ibkr/backfill` returns 202; `GET` polls status. Uses `waitUntil()` from
-`@vercel/functions` — this replaced `setImmediate`, which Vercel killed as soon as the
-response was sent.
+There is no separate backfill endpoint. `POST /api/ibkr/connect` saves the connection and
+fires the first sync through `waitUntil()` from `@vercel/functions` — this replaced
+`setImmediate`, which Vercel killed as soon as the response was sent.
 
 ## IBKR sync
 
