@@ -7,5 +7,5 @@
 ## Practical rules
 
 - New UI components should assume RTL by default. When picking Tailwind directional utilities, prefer logical ones (`ms-*` / `me-*` / `ps-*` / `pe-*`) over left/right ones so a stray LTR mount doesn't break.
-- Numbers, tickers, and timestamps stay LTR-flowing inside RTL context — use IBM Plex Mono for those (see the Theme section of CLAUDE.md).
+- Numbers, tickers, and timestamps stay LTR-flowing inside RTL context — use IBM Plex Mono for those (see the Theme section of AGENTS.md).
 - If you're adding a new dev-facing error thrown from server code, write it in English so it's greppable and lands well in Sentry.
