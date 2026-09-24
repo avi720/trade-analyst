@@ -35,6 +35,15 @@ column means deciding its mode first, then updating the projection, the tool fie
 - Aggregation tools read `ctx.aggregates()` (`computeResearchAggregates`) so every number matches
   the research dashboard — don't re-derive metrics here; see `lib/utils/AGENTS.md`.
 
+## Timestamps are in the user's timezone
+
+The route runs in UTC; the user reads the dashboard in their browser's zone. The sidebar sends
+that IANA zone with each turn and the route validates it (`normalizeTimeZone`, fallback `'UTC'`).
+Everything the model reads uses it: inline rows and `queryTrades` rows render timestamps with
+`toZonedIso` (`2026-01-04T01:30:00+02:00`), date-only / offset-less filter bounds are local, the
+aggregates bucket day/hour in it, and the system prompt names it. Never emit `toISOString()` to
+the model — it would read UTC hours as the user's.
+
 ## Limits and observability
 
 Chat caps come from `lib/billing/limits.ts` (hourly for both tiers, daily per tier). Each turn

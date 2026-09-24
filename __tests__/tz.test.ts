@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { localToUtcIso, toUtcPreview, normalizeTimeZone, zonedDayHour } from '../lib/trade/tz'
+import { localToUtcIso, toUtcPreview, normalizeTimeZone, zonedDayHour, toZonedIso } from '../lib/trade/tz'
 
 describe('localToUtcIso', () => {
   it('UTC passthrough — no offset applied', () => {
@@ -105,6 +105,37 @@ describe('zonedDayHour', () => {
     for (let h = 0; h < 24 * 14; h++) {
       const date = new Date(start + h * 3_600_000)
       expect(zonedDayHour(date, zone)).toEqual({ day: date.getDay(), hour: date.getHours() })
+    }
+  })
+})
+
+describe('toZonedIso', () => {
+  it('Israel winter (IST, +02:00): Saturday 23:30 UTC → Sunday 01:30 local', () => {
+    expect(toZonedIso(new Date('2026-01-03T23:30:00Z'), 'Asia/Jerusalem')).toBe('2026-01-04T01:30:00+02:00')
+  })
+
+  it('Israel summer (IDT, +03:00)', () => {
+    expect(toZonedIso(new Date('2026-06-06T23:30:00Z'), 'Asia/Jerusalem')).toBe('2026-06-07T02:30:00+03:00')
+  })
+
+  it('negative and half-hour offsets', () => {
+    expect(toZonedIso(new Date('2026-01-03T23:30:00Z'), 'America/New_York')).toBe('2026-01-03T18:30:00-05:00')
+    expect(toZonedIso(new Date('2026-01-03T23:30:00Z'), 'Asia/Kolkata')).toBe('2026-01-04T05:00:00+05:30')
+  })
+
+  it('UTC renders as +00:00', () => {
+    expect(toZonedIso(new Date('2026-01-03T23:30:00Z'), 'UTC')).toBe('2026-01-03T23:30:00+00:00')
+  })
+
+  it('truncates to seconds without skewing the offset', () => {
+    expect(toZonedIso(new Date('2026-01-03T23:30:59.999Z'), 'Asia/Jerusalem')).toBe('2026-01-04T01:30:59+02:00')
+  })
+
+  it('round-trips to the same instant across the March DST switch', () => {
+    const start = Date.UTC(2026, 2, 26) // Israel springs forward on Fri 27 Mar 2026
+    for (let m = 0; m < 3 * 24 * 60; m += 15) {
+      const ms = start + m * 60_000
+      expect(Date.parse(toZonedIso(new Date(ms), 'Asia/Jerusalem'))).toBe(ms)
     }
   })
 })

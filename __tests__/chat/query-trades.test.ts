@@ -72,11 +72,12 @@ function makeCtx(
   trades: ChatTrade[],
   mode: ChatContextMode,
   fetchFreeText: FetchFreeText = async () => new Map<string, TradeFreeText>(),
+  timeZone = 'UTC',
 ): ToolContext {
   return {
     trades,
     mode,
-    timeZone: 'UTC',
+    timeZone,
     fetchFreeText,
     // Not exercised by queryTrades — the aggregation tools own this.
     aggregates: () => ({}) as ResearchAggregates,
@@ -211,7 +212,8 @@ describe('queryTradesTool — filters', () => {
       filters: { closedFrom: '2026-01-02T10:00:00Z', closedTo: '2026-01-04T10:00:00Z' },
     })
     expect(exact.matched).toBe(3)
-    // A bare date covers the whole UTC day, so a 10:00 close is still inside it.
+    // A bare date covers the whole day in ctx.timeZone (UTC here), so a 10:00
+    // close is still inside it.
     const dateOnly = await run({ filters: { closedFrom: '2026-01-04', closedTo: '2026-01-04' } })
     expect(ids(dateOnly)).toEqual(['TSLA'])
   })
@@ -231,7 +233,7 @@ describe('queryTradesTool — ordering', () => {
   it('defaults to closedAt desc', async () => {
     const r = await run({})
     expect(ids(r)).toEqual(['NVDA', 'TSLA', 'AAPL', 'MSFT', 'AAPL'])
-    expect(r.rows[0].closedAt).toBe('2026-01-05T10:00:00.000Z')
+    expect(r.rows[0].closedAt).toBe('2026-01-05T10:00:00+00:00')
   })
 
   it('orders by closedAt asc', async () => {
@@ -351,7 +353,7 @@ describe('queryTradesTool — full mode', () => {
     const r = await run({ fields: ['ticker', 'openedAt', 'executionQuality', 'emotionalState'], limit: 1 }, 'full')
     expect(r.rows[0]).toEqual({
       ticker: 'NVDA',
-      openedAt: '2026-01-05T09:00:00.000Z',
+      openedAt: '2026-01-05T09:00:00+00:00',
       executionQuality: 9,
       emotionalState: 'בטוח',
     })
@@ -415,5 +417,52 @@ describe('queryTradesTool — empty scope', () => {
     expect(r.rows).toEqual([])
     expect(r.matched).toBe(5)
     expect(r.hasMore).toBe(false)
+  })
+})
+
+// The route runs in UTC but the user reads — and asks about — their own clock.
+describe('queryTradesTool — user timezone', () => {
+  // Saturday 23:30 UTC = Sunday 2026-01-04 01:30 in Israel (IST, UTC+2).
+  const lateSaturday = makeTrade({
+    id: 'tz',
+    ticker: 'TZ',
+    openedAt: new Date('2026-01-03T23:30:00Z'),
+    closedAt: new Date('2026-01-03T23:45:00Z'),
+  })
+  const runIn = (timeZone: string, args: Record<string, unknown>) =>
+    Promise.resolve(
+      queryTradesTool.execute(args, makeCtx([lateSaturday], 'full', undefined, timeZone)),
+    ) as Promise<QueryTradesResult>
+
+  it('renders row timestamps in the user zone, with offset', async () => {
+    const r = await runIn('Asia/Jerusalem', { fields: ['ticker', 'openedAt', 'closedAt'] })
+    expect(r.rows[0]).toEqual({
+      ticker: 'TZ',
+      openedAt: '2026-01-04T01:30:00+02:00',
+      closedAt: '2026-01-04T01:45:00+02:00',
+    })
+  })
+
+  it('reads a bare date as the user\'s local day, not the UTC day', async () => {
+    const sunday = { closedFrom: '2026-01-04', closedTo: '2026-01-04' }
+    const saturday = { closedFrom: '2026-01-03', closedTo: '2026-01-03' }
+    expect((await runIn('Asia/Jerusalem', { filters: sunday })).matched).toBe(1)
+    expect((await runIn('Asia/Jerusalem', { filters: saturday })).matched).toBe(0)
+    // Same instant, UTC user: it is still Saturday.
+    expect((await runIn('UTC', { filters: sunday })).matched).toBe(0)
+    expect((await runIn('UTC', { filters: saturday })).matched).toBe(1)
+  })
+
+  it('reads an offset-less date-time as local wall time', async () => {
+    // 01:30 local is the open; the bound is inclusive.
+    expect((await runIn('Asia/Jerusalem', { filters: { openedFrom: '2026-01-04T01:30' } })).matched).toBe(1)
+    expect((await runIn('Asia/Jerusalem', { filters: { openedFrom: '2026-01-04T01:30:01' } })).matched).toBe(0)
+    expect((await runIn('Asia/Jerusalem', { filters: { openedTo: '2026-01-04T01:29:59.999' } })).matched).toBe(0)
+  })
+
+  it('takes an explicit Z / offset bound as-is, whatever the user zone', async () => {
+    expect((await runIn('Asia/Jerusalem', { filters: { openedFrom: '2026-01-03T23:30:00Z' } })).matched).toBe(1)
+    expect((await runIn('Asia/Jerusalem', { filters: { openedFrom: '2026-01-04T01:30:00+02:00' } })).matched).toBe(1)
+    expect((await runIn('Asia/Jerusalem', { filters: { openedFrom: '2026-01-04T01:31:00+02:00' } })).matched).toBe(0)
   })
 })

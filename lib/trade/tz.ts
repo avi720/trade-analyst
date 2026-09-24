@@ -7,13 +7,21 @@ export const TRADE_TIMEZONES = [
 
 export const DEFAULT_TIMEZONE = 'Asia/Jerusalem'
 
+// Constructing an Intl.DateTimeFormat is far costlier than calling it, and the
+// chat path formats every in-scope trade's timestamps in the same zone.
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>()
+
 function getTzOffsetMs(date: Date, tz: string): number {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hour12: false,
-  })
+  let fmt = offsetFormatters.get(tz)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    })
+    offsetFormatters.set(tz, fmt)
+  }
   const parts = fmt.formatToParts(date)
   const get = (type: string) => Number(parts.find(p => p.type === type)!.value)
   let h = get('hour')
@@ -35,6 +43,23 @@ export function localToUtcIso(dateStr: string, timeStr: string, tz: string): str
     utcMs = Date.UTC(y, mo - 1, d, h, mi, 0) - getTzOffsetMs(new Date(utcMs), tz)
   }
   return new Date(utcMs).toISOString()
+}
+
+/**
+ * Formats an instant as ISO 8601 wall-clock time in the given IANA timezone,
+ * with its UTC offset and second precision: `2026-01-04T01:30:00+02:00`.
+ * Still a valid, unambiguous instant, but a reader (or an LLM) sees the user's
+ * local day and hour directly instead of having to convert from UTC.
+ */
+export function toZonedIso(date: Date, tz: string): string {
+  // getTzOffsetMs compares at second resolution, so sub-second input skews it
+  // by < 1s; real offsets are whole minutes.
+  const offsetMin = Math.round(getTzOffsetMs(date, tz) / 60_000)
+  const wall = new Date(date.getTime() + offsetMin * 60_000).toISOString().slice(0, 19)
+  const abs = Math.abs(offsetMin)
+  const hh = String(Math.floor(abs / 60)).padStart(2, '0')
+  const mm = String(abs % 60).padStart(2, '0')
+  return `${wall}${offsetMin < 0 ? '-' : '+'}${hh}:${mm}`
 }
 
 /**
