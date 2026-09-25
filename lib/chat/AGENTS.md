@@ -22,7 +22,9 @@ What each mode may see is a product boundary, enforced in code:
 The gate lives in the tool **executors**, not just the declarations: a forbidden field requested
 by the model is dropped and reported (`droppedFields` + a Hebrew note), never thrown. Adding a
 column means deciding its mode first, then updating the projection, the tool field lists and
-`system-prompt.ts` together.
+`system-prompt.ts` together — including its field-label glossary: the model sees code keys
+(`planDeviation`, `actualR`) and is told to answer with the dashboard's label instead, so an
+unlabeled key leaks into answers. The system-prompt test fails on any unlabeled KPI or row key.
 
 ## Inline vs tools vs web
 
