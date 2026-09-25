@@ -35,6 +35,66 @@ const FULL_CAPABILITIES = `מה זמין לך במצב "עומק":
 כל מה שיש במצב "חכם", ובנוסף שעת הפתיחה, R מתוכנן (יחס הסיכוי/סיכון מהתוכנית — יעד מול סטופ), ציון איכות הביצוע, והמצב הרגשי.
 שדות הטקסט החופשי (הערות, "מה עשיתי נכון", "מה הייתי משנה") אינם נשלחים אליך אוטומטית כי הם ארוכים מאוד — משוך אותם דרך הכלי queryTrades רק כששאלה באמת דורשת אותם.`
 
+// The data reaches the model under code keys (the KPI baseline is a raw
+// `TradeStats` JSON, rows and tool results are camelCase), and without a map
+// the model echoed them into answers — "הסטייה מהתכנית (planDeviation)". Labels
+// are the ones the research dashboard and search table show, verbatim, even
+// where the UI itself keeps English ("Profit Factor").
+const FIELD_LABELS: Record<string, string> = {
+  // KPI baseline (`TradeStats`) — every key, both modes.
+  totalTrades: 'טריידים',
+  rTradeCount: 'מספר הטריידים עם R',
+  winRate: 'אחוז הצלחה',
+  avgR: 'R ממוצע',
+  profitFactor: 'Profit Factor',
+  expectancy: 'Expectancy',
+  maxDrawdown: 'Max Drawdown',
+  totalPnl: 'סה״כ P&L',
+  avgWin: 'ממוצע רווח',
+  avgLoss: 'ממוצע הפסד',
+  planDeviation: 'סטייה מהתוכנית',
+  planDeviationCount: 'מספר הטריידים שעליהם חושבה הסטייה מהתוכנית',
+  stopDiscipline: 'משמעת סטופ',
+  stopDisciplineCount: 'מספר הטריידים שעליהם חושבה משמעת הסטופ',
+  // Trade rows (Smart projection) and aggregation-tool results.
+  ticker: 'טיקר',
+  direction: 'כיוון',
+  setup: 'סטאפ',
+  tags: 'תגיות',
+  actualR: 'R בפועל',
+  realizedPnl: 'P&L',
+  result: 'תוצאה',
+  closedAt: 'מועד הסגירה',
+  tradeCount: 'מספר טריידים',
+}
+
+// Full-mode-only row fields. Kept out of the Smart glossary so it never names a
+// field the capability section says Smart can't see.
+const FULL_FIELD_LABELS: Record<string, string> = {
+  openedAt: 'שעת הפתיחה',
+  plannedR: 'R מתוכנן',
+  executionQuality: 'איכות ביצוע',
+  emotionalState: 'מצב רגשי',
+  notes: 'הערות',
+  didRight: '"מה עשיתי נכון"',
+  wouldChange: '"מה הייתי משנה"',
+}
+
+// Signs go first in logical order: the chat bubble isolates a *leading* sign
+// with its number as one LTR run (components/chat-message-text.tsx), so
+// "-0.74R" displays right while "0.74R-" is wrong the moment it is copied.
+function answerStyle(mode: ChatContextMode): string {
+  const labels = mode === 'full' ? { ...FIELD_LABELS, ...FULL_FIELD_LABELS } : FIELD_LABELS
+  const glossary = Object.entries(labels).map(([key, label]) => `- ${key}: ${label}`).join('\n')
+  return `ניסוח התשובה:
+- המשתמש מכיר את המדדים רק בשמות שמופיעים לו בממשק. לעולם אל תכתוב בתשובה שם שדה מהנתונים (כמו planDeviation, actualR, plannedR) — גם לא בסוגריים ליד השם העברי. השתמש בשם מהממשק לפי המיפוי למטה, גם כשהשם בממשק הוא באנגלית (Profit Factor).
+- מספר עם סימן נכתב עם הסימן לפניו: -0.74R, +1.20R, -$350.00. לעולם לא 0.74R- או 350$-.
+- אחוז הצלחה מופיע בנתונים כשבר בין 0 ל-1 — הצג אותו באחוזים (0.56 → 56%).
+
+שמות בממשק לפי שם השדה בנתונים:
+${glossary}`
+}
+
 // Every timestamp the model reads (inline rows, queryTrades rows) is rendered in
 // the user's zone, and date-only filter bounds are read in it too. Saying so
 // keeps the model from "correcting" local times it assumes are UTC.
@@ -84,6 +144,8 @@ export function buildSystemPrompt(params: {
     mode === 'full' ? FULL_CAPABILITIES : SMART_CAPABILITIES,
     '',
     HONESTY,
+    '',
+    answerStyle(mode),
   ]
 
   if (hasTools) {
