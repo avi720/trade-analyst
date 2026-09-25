@@ -366,7 +366,8 @@ export function TradeAiImport({ defaultTimezone }: { defaultTimezone: string }) 
             }}
           />
           <span aria-hidden="true" className="text-2xl">🤖</span>
-          <span className="text-sm text-text-dim font-mono">
+          {/* dir="auto": file names take their own direction, else "2026-trades.xlsx" renders as "trades.xlsx-2026" */}
+          <span dir="auto" className="text-sm text-text-dim font-mono">
             {file ? file.name : 'גרור קובץ Excel לכאן או לחץ לבחירה'}
           </span>
           <span className="text-xs text-text-faint font-mono">.xlsx · עד {MAX_UPLOAD_MB}MB</span>
@@ -416,7 +417,7 @@ function JobsPanel({
           return (
             <li key={j.id} className="flex items-center justify-between gap-3 py-2">
               <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-sm font-mono text-text-main truncate">{j.originalFilename}</span>
+                <span dir="auto" className="text-sm font-mono text-text-main truncate">{j.originalFilename}</span>
                 <span className="text-xs font-mono text-text-faint">
                   {new Date(j.createdAt).toLocaleString('he-IL')} · {j.sourceTimezone}
                   {j.status === 'COMPLETED' && j.importSummary
@@ -505,7 +506,7 @@ function PreviewEditor({
       {/* Banner */}
       <div className="panel p-3 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-mono text-text-main">{job.originalFilename}</span>
+          <span dir="auto" className="text-sm font-mono text-text-main">{job.originalFilename}</span>
           <span className="text-xs font-mono text-text-dim">
             אזור זמן: {job.sourceTimezone}
           </span>
