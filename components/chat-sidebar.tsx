@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useChatOpen, useChatContextData } from '@/lib/chat/chat-context'
 import { createClient } from '@/lib/supabase/client'
 import { useHydrated } from '@/lib/hooks/use-hydrated'
+import { ChatMessageText } from '@/components/chat-message-text'
 
 type ContextMode = 'smart' | 'full'
 
@@ -325,7 +326,11 @@ export function ChatSidebar({ isPro = false }: { isPro?: boolean }) {
                       : 'bg-input-bg border border-shade text-text-main'
                 }`}
               >
-                {msg.content}
+                {msg.role === 'assistant' && !msg.isError ? (
+                  <ChatMessageText content={msg.content} />
+                ) : (
+                  msg.content
+                )}
               </div>
             </div>
           ))}
