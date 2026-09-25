@@ -92,7 +92,8 @@ function makeDefaultCall(timeoutMs: number): GeminiCall {
 const SYSTEM_PROMPT = `You convert a user's personal trading spreadsheet into structured trade legs for a trading journal.
 
 The target schema (a "leg" = one execution) has these fields:
-- ticker (string, required), date (required), time (HH:MM), side ("BUY" | "SELL", required),
+- ticker (string, required), date (YYYY-MM-DD, required), time (HH:MM, 24h),
+  side ("BUY" | "SELL", required),
   quantity (positive number, required), price (positive number, required),
   commission (number), currency (one of USD,EUR,ILS,GBP,JPY,CHF,CAD,AUD,CNY,HKD)
 - optional: commissionCurrency, orderType, orderPlacedDate, orderPlacedTime, broker,
@@ -157,7 +158,11 @@ B) ROUND-TRIP JOURNAL — one row per TRADE, holding both sides at once: columns
 
 Rules:
 - NEVER infer or output a timezone — the app supplies it.
-- Dates must reflect what is written; do not shift them.
+- Dates must reflect what is written; do not shift them. In "extraction" legs, write every
+  date as YYYY-MM-DD and every time as 24h HH:MM, converting from whatever the sheet uses
+  (05/01/2026 in a day-first sheet -> 2026-01-05; 4:05 PM -> 16:05). Decide day-first vs
+  month-first once for the whole column: a first part above 12 settles it; Hebrew or
+  Israeli sheets are day-first unless the values prove otherwise.
 - If a value is absent, omit the field (mapping: set the column to null).
 - Prefer "mapping" when possible; it is cheaper and more reliable — but only for shape A.
 - Order legs chronologically. The journal replays them in order to reconstruct positions,
