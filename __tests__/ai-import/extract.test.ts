@@ -192,4 +192,17 @@ describe('round-trip extraction result', () => {
       expect(res.legs[0].date <= res.legs[1].date).toBe(true)
     }
   })
+
+  it('stops retrying once another attempt could overrun the time budget', async () => {
+    // Each attempt takes ~60ms and may take up to 100ms; with a 150ms budget the second
+    // attempt (starting at ~60ms) could end past the deadline, so it never starts.
+    const call: GeminiCall = vi.fn(async () => {
+      await new Promise((r) => setTimeout(r, 60))
+      throw new Error('gemini_timeout')
+    })
+    await expect(
+      extract(sampleWith([['x']]), { call, delayFn: noDelay, timeoutMs: 100, budgetMs: 150 }),
+    ).rejects.toThrow('gemini_timeout')
+    expect(call).toHaveBeenCalledTimes(1)
+  })
 })

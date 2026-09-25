@@ -23,10 +23,18 @@ export interface ExtractOptions {
   delayFn?: (ms: number) => Promise<void>
   /** Row-window size for extraction-mode chunking of large sheets. */
   chunkSize?: number
+  /** Wall-clock budget for the whole extraction; no attempt starts that could overrun it. */
+  budgetMs?: number
 }
 
 const RETRY_DELAYS = [1000, 2000, 4000, 8000, 16000]
-const DEFAULT_TIMEOUT_MS = 60_000
+// Flash thinks before answering, and that's deliberate — it's what reads messy, non-tabular
+// sheets. Extraction then emits every leg as JSON: ~73s for a 30-trade journal, so the old 60s
+// timeout failed every realistic extraction. The runner has no function time limit.
+const DEFAULT_TIMEOUT_MS = 240_000
+// The watchdog fails any job in flight for >15 min. Stop starting attempts well before that,
+// so a slow model fails the job with gemini_timeout instead of timeout_watchdog.
+const DEFAULT_BUDGET_MS = 12 * 60_000
 const DEFAULT_CHUNK = 80
 const CHUNK_OVERLAP = 5
 const CONFIDENCE_FLOOR = 0.6
@@ -189,9 +197,13 @@ async function callAndParse(
   model: GeminiModel,
   retries: number,
   delayFn: (ms: number) => Promise<void>,
+  budget: { deadline: number; timeoutMs: number },
 ): Promise<AiMapping> {
   let lastErr: unknown
   for (let attempt = 0; attempt <= retries; attempt++) {
+    if (Date.now() + budget.timeoutMs > budget.deadline) {
+      throw lastErr instanceof Error ? lastErr : new Error('gemini_timeout')
+    }
     try {
       const raw = await call({ systemPrompt, userPrompt, model })
       const json = JSON.parse(stripCodeFence(raw))
@@ -237,16 +249,17 @@ export async function extract(sample: WorkbookSample, opts: ExtractOptions = {})
   const delayFn = opts.delayFn ?? ((ms) => new Promise((r) => setTimeout(r, ms)))
   const chunkSize = opts.chunkSize ?? DEFAULT_CHUNK
   const call = opts.call ?? makeDefaultCall(timeoutMs)
+  const budget = { deadline: Date.now() + (opts.budgetMs ?? DEFAULT_BUDGET_MS), timeoutMs }
 
   const systemPrompt = SYSTEM_PROMPT
   const userPrompt = buildUserPrompt(sample)
 
-  let result = await callAndParse(call, systemPrompt, userPrompt, 'gemini-2.5-flash', retries, delayFn)
+  let result = await callAndParse(call, systemPrompt, userPrompt, 'gemini-2.5-flash', retries, delayFn, budget)
 
   // Low-confidence upgrade: one pass on pro.
   if (result.confidence < CONFIDENCE_FLOOR) {
     try {
-      result = await callAndParse(call, systemPrompt, userPrompt, 'gemini-2.5-pro', retries, delayFn)
+      result = await callAndParse(call, systemPrompt, userPrompt, 'gemini-2.5-pro', retries, delayFn, budget)
     } catch {
       // keep the flash result if the upgrade attempt fails
     }
@@ -278,6 +291,7 @@ export async function extract(sample: WorkbookSample, opts: ExtractOptions = {})
         'gemini-2.5-flash',
         retries,
         delayFn,
+        budget,
       )
       if (chunkRes.mode === 'extraction') {
         for (const leg of chunkRes.legs) merged.set(legKey(leg), leg)
