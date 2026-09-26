@@ -69,6 +69,7 @@ export function GoogleSignInButton({ next = '/research', mode = 'signin' }: Prop
     if (!clientId) throw new Error('NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set')
 
     let cancelled = false
+    let observer: ResizeObserver | undefined
     generateNonce().then(([rawNonce, hashedNonce]) => {
       if (cancelled) return
       gis.initialize({
@@ -95,22 +96,31 @@ export function GoogleSignInButton({ next = '/research', mode = 'signin' }: Prop
           window.location.assign(next)
         },
       })
-      container.replaceChildren()
-      gis.renderButton(container, {
-        type: 'standard',
-        theme: 'filled_black',
-        size: 'large',
-        text: mode === 'signup' ? 'signup_with' : 'signin_with',
-        shape: 'rectangular',
-        logo_alignment: 'center',
-        // GIS takes a fixed pixel width, capped at 400.
-        width: Math.min(400, container.clientWidth),
-        locale: 'he',
-        click_listener: () => trackEvent('google_signin_clicked', { next }),
+      // GIS takes a fixed pixel width (capped at 400) and the container can still be 0 wide when
+      // this runs, so render on the first real width and again whenever it changes.
+      let renderedWidth = 0
+      observer = new ResizeObserver(([entry]) => {
+        const width = Math.min(400, Math.floor(entry.contentRect.width))
+        if (width === 0 || width === renderedWidth) return
+        renderedWidth = width
+        container.replaceChildren()
+        gis.renderButton(container, {
+          type: 'standard',
+          theme: 'filled_black',
+          size: 'large',
+          text: mode === 'signup' ? 'signup_with' : 'signin_with',
+          shape: 'rectangular',
+          logo_alignment: 'center',
+          width,
+          locale: 'he',
+          click_listener: () => trackEvent('google_signin_clicked', { next }),
+        })
       })
+      observer.observe(container)
     })
     return () => {
       cancelled = true
+      observer?.disconnect()
     }
   }, [scriptReady, mode, next])
 
