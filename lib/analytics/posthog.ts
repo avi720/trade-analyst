@@ -52,6 +52,7 @@ export type FunnelEvent =
   // Google OAuth + auth-failure telemetry. Before these existed, a Google signup that lost
   // its PKCE exchange left no trace anywhere — see docs/in-progress/AUTH-HARDENING-GEO-GATE.md.
   | 'google_signin_clicked'
+  | 'google_signin_failed'
   | 'oauth_callback_failed'
   | 'login_failed'
   | 'ai_import_uploaded'

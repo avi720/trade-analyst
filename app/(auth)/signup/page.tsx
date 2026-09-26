@@ -341,7 +341,7 @@ export default function SignupPage() {
           <>
             {!verificationSent ? (
               <>
-                <GoogleSignInButton next="/signup" label="הירשם עם Google" />
+                <GoogleSignInButton next="/signup" mode="signup" />
 
                 <div className="flex items-center gap-3 my-5">
                   <div className="flex-1 h-px bg-border" />

@@ -1,58 +1,124 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import Script from 'next/script'
 import { trackEvent } from '@/lib/analytics/posthog'
+
+// Google Identity Services (GIS) instead of Supabase's redirect OAuth flow. The redirect flow
+// sends Google to <ref>.supabase.co/auth/v1/callback, so Google's account chooser shows the
+// Supabase project domain; GIS runs from our own origin, so it shows tradeanalyst.app. The
+// ID token GIS returns is exchanged for a session with signInWithIdToken — no /auth/callback hop.
+
+type CredentialResponse = { credential: string }
+
+type GoogleAccountsId = {
+  initialize: (config: {
+    client_id: string
+    callback: (response: CredentialResponse) => void
+    nonce: string
+    ux_mode: 'popup'
+    context: 'signin' | 'signup'
+  }) => void
+  renderButton: (
+    parent: HTMLElement,
+    options: {
+      type: 'standard'
+      theme: 'filled_black'
+      size: 'large'
+      text: 'signin_with' | 'signup_with'
+      shape: 'rectangular'
+      logo_alignment: 'center'
+      width: number
+      locale: string
+      click_listener: () => void
+    },
+  ) => void
+}
+
+declare global {
+  interface Window {
+    google?: { accounts: { id: GoogleAccountsId } }
+  }
+}
 
 type Props = {
   next?: string
-  label?: string
+  mode?: 'signin' | 'signup'
 }
 
-export function GoogleSignInButton({ next = '/research', label = 'המשך עם Google' }: Props) {
+// Supabase expects Google to have seen the SHA-256 hex of the nonce and signInWithIdToken to
+// get the raw value.
+async function generateNonce(): Promise<[raw: string, hashed: string]> {
+  const raw = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
+  const hashed = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
+  return [raw, hashed]
+}
+
+export function GoogleSignInButton({ next = '/research', mode = 'signin' }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [scriptReady, setScriptReady] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function handleClick() {
-    setError(null)
-    setLoading(true)
-    // Fired before the redirect so the OAuth hop has a denominator: without it there is no
-    // way to tell "nobody tried Google" from "everybody who tried Google fell over".
-    trackEvent('google_signin_clicked', { next })
-    try {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-      const origin = window.location.origin
-      const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo },
+  useEffect(() => {
+    const container = containerRef.current
+    const gis = window.google?.accounts.id
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    if (!scriptReady || !container || !gis) return
+    if (!clientId) throw new Error('NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set')
+
+    let cancelled = false
+    generateNonce().then(([rawNonce, hashedNonce]) => {
+      if (cancelled) return
+      gis.initialize({
+        client_id: clientId,
+        nonce: hashedNonce,
+        ux_mode: 'popup',
+        context: mode,
+        callback: async ({ credential }) => {
+          setError(null)
+          setLoading(true)
+          const { createClient } = await import('@/lib/supabase/client')
+          const { error } = await createClient().auth.signInWithIdToken({
+            provider: 'google',
+            token: credential,
+            nonce: rawNonce,
+          })
+          if (error) {
+            trackEvent('google_signin_failed', { next, supabaseError: error.message })
+            setError('שגיאה בהתחברות עם Google')
+            setLoading(false)
+            return
+          }
+          // Full navigation, not router.push: the server layout must see the new session cookie.
+          window.location.assign(next)
+        },
       })
-      if (error) {
-        setError('שגיאה בהתחברות עם Google')
-        setLoading(false)
-      }
-    } catch {
-      setError('שגיאה בהתחברות עם Google')
-      setLoading(false)
+      container.replaceChildren()
+      gis.renderButton(container, {
+        type: 'standard',
+        theme: 'filled_black',
+        size: 'large',
+        text: mode === 'signup' ? 'signup_with' : 'signin_with',
+        shape: 'rectangular',
+        logo_alignment: 'center',
+        // GIS takes a fixed pixel width, capped at 400.
+        width: Math.min(400, container.clientWidth),
+        locale: 'he',
+        click_listener: () => trackEvent('google_signin_clicked', { next }),
+      })
+    })
+    return () => {
+      cancelled = true
     }
-  }
+  }, [scriptReady, mode, next])
 
   return (
     <div className="space-y-2">
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={loading}
-        className="w-full py-2 px-4 bg-white text-zinc-800 font-medium rounded-md hover:bg-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-      >
-        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-          <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" />
-          <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
-          <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" />
-          <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" />
-        </svg>
-        {loading ? 'מפנה...' : label}
-      </button>
+      <Script src="https://accounts.google.com/gsi/client" onReady={() => setScriptReady(true)} />
+      <div ref={containerRef} className="flex justify-center min-h-10" aria-busy={loading} />
+      {loading && <p className="text-text-dim text-sm text-center">מתחבר...</p>}
       {error && <p className="text-red text-sm text-center">{error}</p>}
     </div>
   )

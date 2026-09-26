@@ -19,6 +19,11 @@ Added after a Google-OAuth signup failed silently and left no trace in PostHog *
 - `/auth/callback` appends `reason=exchange_failed` on PKCE failure so `/signup/verified` can
   tell a genuine email verification from a failed exchange. The page renders the same copy
   either way, so **without the param the metric is meaningless**.
+- **Google sign-in does not pass through `/auth/callback`.** It uses Google Identity Services +
+  `signInWithIdToken` in [components/google-signin-button.tsx](../../components/google-signin-button.tsx),
+  so Google's chooser shows our origin instead of `<ref>.supabase.co`. Its failures surface as
+  the client-side PostHog event `google_signin_failed`, not as an `AuditEvent`; the callback's
+  `oauth_callback_failed` now covers email-link exchanges only.
 - `logAuditEvent` stamps `metadata.country` on **every** event type. `AuditContext.userId` is
   `string | null` — auth-callback events must pass `null`, because `AuditEvent.userId` has an FK
   to `User(id)` and those events fire before the `User` row exists.

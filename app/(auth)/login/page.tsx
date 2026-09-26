@@ -65,7 +65,7 @@ export default function LoginPage() {
           <p className="text-text-dim text-sm mt-1">יומן מסחר חכם</p>
         </div>
 
-        <GoogleSignInButton label="התחבר עם Google" />
+        <GoogleSignInButton />
 
         <div className="flex items-center gap-3 my-5">
           <div className="flex-1 h-px bg-border" />
