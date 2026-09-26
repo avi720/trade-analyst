@@ -80,11 +80,13 @@ Two layout facts that break silently if you get them wrong:
 ### Key facts
 
 - **Environments**: production is `https://tradeanalyst.app` (branch `main`). The **dev
-  environment** is `https://trade-analyst-git-dev-avior-paz-s-projects.vercel.app` — Vercel's
-  branch alias for `dev`, always serving the latest `dev` commit. Use it (not localhost) to see
-  or demo the newest code on real infrastructure. Local `.env.local` points to a separate
-  Supabase project (`sssichkbdqariguvqprc`) from production (`nwvswntqrqqtwzrhzpmi`), so data,
-  tiers and sessions differ between them.
+  environment** is `https://trade-analyst-lyart.vercel.app` — a project domain pinned to the
+  `dev` branch, always serving the latest `dev` commit. (Older audit docs call that URL
+  "production"; it was re-pointed to `dev` once `tradeanalyst.app` went live.) Use it (not
+  localhost) to see or demo the newest code on real infrastructure. Both the dev deployment and
+  local `.env.local` use a separate Supabase project (`sssichkbdqariguvqprc`) from production
+  (`nwvswntqrqqtwzrhzpmi`), so data, tiers, sessions and Auth settings (enabled providers,
+  redirect allow-list) differ between them.
 
 - **Routing**: default landing is `/research`. `app/page.tsx`, the login page and the auth
   callback all redirect there. The old live open-positions `/dashboard` view was removed

@@ -18,8 +18,8 @@
 | `User.id` (userId) | `d80aa9b2-0c85-4235-bf0a-a101fea75f90` |
 | נוצר | 2026-05-23 |
 | כתובת האתר | `https://tradeanalyst.app` (התחקור: `/research`) |
-| סביבת dev | `https://trade-analyst-git-dev-avior-paz-s-projects.vercel.app` (branch alias של `dev`) |
-| Supabase project ref | `nwvswntqrqqtwzrhzpmi` |
+| סביבת dev | `https://trade-analyst-lyart.vercel.app` (דומיין שמוצמד ל-branch `dev`) |
+| Supabase project ref | prod: `nwvswntqrqqtwzrhzpmi` · dev: `sssichkbdqariguvqprc` — ה-tier נפרד בכל אחד מהם |
 
 > שים לב: המשתמש `avi.paz159@gmail.com` (`85019b4f-89be-44fc-bacb-9b66923ec426`) הוא חשבון
 > נפרד עם טריידים משלו (QQQ, OPTFIX, MANTEST, FIXTST, SETUPBUG). הוא **לא** קשור לניסויי ה-QA.
