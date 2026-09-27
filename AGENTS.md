@@ -23,6 +23,7 @@ import, auth telemetry).
 | Any schema change, migration, RLS policy, new column, regenerating `lib/db/types.ts` | `db-schema` |
 | Adding, renaming or removing an environment variable | `env-var` |
 | Touching `.github/workflows`, `/api/cron/*`, the AI-import worker, backfill, retention | `cron-and-workers` |
+| Making, re-cutting, scoring or publishing a campaign video (Reel / Short / X) | `marketing-video` |
 
 Two things from those skills are worth knowing without loading anything: **`Order` columns
 dropped in cleanup (`tax`, `tradeDate`, `exchange`, `proceeds`, `brokerTradeId`, `rawPayload`)

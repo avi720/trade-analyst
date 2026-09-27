@@ -38,3 +38,6 @@ npm-debug.log*
 /marketing-campaign
 .gitignore.marketing-additions
 
+
+# Local-only skill: campaign accounts/workflow, repo is public
+.claude/skills/marketing-video/
