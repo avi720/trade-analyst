@@ -12,8 +12,6 @@ const IBRIT_TIMEZONE = "America/New_York";
 
 // Trade transaction types. Everything else in the Activity file (dividends,
 // accruals, interest, fees, transfers, corporate actions) is not an execution.
-// CA (cancel) / CO (correct) are skipped too: reversing an already-persisted
-// execution has no path in the FIFO pipeline, same as with Flex today.
 const SIDE_BY_TRANSACTION_TYPE: Record<string, NormalizedExecution["side"]> = {
   BUY: "BUY",
   COVER: "BUY",
@@ -171,15 +169,47 @@ function normalizeRow(row: Record<string, string>, broker: string): NormalizedEx
   };
 }
 
+// A broker cancel (CA) or correction (CO) of an execution. The FIFO pipeline
+// only moves forward, so these can't be applied automatically.
+export interface IbritCorrection {
+  transactionType: "CA" | "CO";
+  accountId: string | undefined;
+  ticker: string | undefined;
+  tradeId: string | undefined;
+  executionId: string | undefined;
+  dateTime: string | undefined;
+}
+
+export interface IbritActivity {
+  executions: NormalizedExecution[];
+  // Non-empty means the user's trades may now be wrong: the sync must surface
+  // it (BrokerEvent error + failed sync status), never drop it silently.
+  corrections: IbritCorrection[];
+}
+
+function toCorrection(row: Record<string, string>): IbritCorrection | null {
+  const type = row["TransactionType"]?.trim().toUpperCase();
+  if (type !== "CA" && type !== "CO") return null;
+  return {
+    transactionType: type,
+    accountId: toOptionalString(row["AccountID"]),
+    ticker: toOptionalString(row["Symbol"]),
+    tradeId: toOptionalString(row["TradeID"]),
+    executionId: toOptionalString(row["ExecutionID"] ?? row["ExcecutionID"]),
+    dateTime: toOptionalString(row["DateTime"]),
+  };
+}
+
 /**
- * Parses an IBRIT Activity CSV into the trade executions it contains.
- * Non-trade rows are dropped; trade rows missing a required field are skipped
- * with a warning. Throws if the trailer's record count doesn't match the file,
- * since a truncated download must not be processed as if it were complete.
+ * Parses an IBRIT Activity CSV into its trade executions and any cancel /
+ * correction records. Other non-trade rows are dropped; trade rows missing a
+ * required field are skipped with a warning. Throws if the trailer's record
+ * count doesn't match the file, since a truncated download must not be
+ * processed as if it were complete.
  */
-export function parseIbritActivityCsv(csv: string, broker: string = "IBKR"): NormalizedExecution[] {
+export function parseIbritActivityCsv(csv: string, broker: string = "IBKR"): IbritActivity {
   const lines = csv.split(/\r?\n/).filter((line) => line.trim() !== "");
-  if (lines.length === 0) return [];
+  if (lines.length === 0) return { executions: [], corrections: [] };
 
   let columns: string[] | null = null;
   let trailerCount: number | null = null;
@@ -210,8 +240,14 @@ export function parseIbritActivityCsv(csv: string, broker: string = "IBKR"): Nor
     );
   }
 
-  return rows.flatMap((row) => {
-    const exec = normalizeRow(row, broker);
-    return exec ? [exec] : [];
-  });
+  return {
+    executions: rows.flatMap((row) => {
+      const exec = normalizeRow(row, broker);
+      return exec ? [exec] : [];
+    }),
+    corrections: rows.flatMap((row) => {
+      const correction = toCorrection(row);
+      return correction ? [correction] : [];
+    }),
+  };
 }

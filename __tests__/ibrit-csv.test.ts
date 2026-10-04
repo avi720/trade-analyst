@@ -29,6 +29,10 @@ function tradeRow(overrides: Record<string, string>): string {
   return fields.join(",");
 }
 
+function executionsOf(csv: string) {
+  return parseIbritActivityCsv(csv).executions;
+}
+
 // Wraps data records in header, column header and a matching trailer.
 function activityFile(dataRows: string[]): string {
   const lines = [HEADER, COLUMNS, ...dataRows];
@@ -37,7 +41,7 @@ function activityFile(dataRows: string[]): string {
 
 describe("parseIbritActivityCsv", () => {
   it("extracts the single trade from IBKR's sample file and drops dividend rows", () => {
-    const execs = parseIbritActivityCsv(SAMPLE_ACTIVITY);
+    const execs = executionsOf(SAMPLE_ACTIVITY);
     expect(execs).toHaveLength(1);
     expect(execs[0]).toEqual({
       brokerExecId: "00012dc6.61c32a11.01.01",
@@ -62,7 +66,7 @@ describe("parseIbritActivityCsv", () => {
   });
 
   it("maps transaction types to sides: BUY/COVER → BUY, SELL → SELL, SHORT → SSHORT", () => {
-    const execs = parseIbritActivityCsv(
+    const execs = executionsOf(
       activityFile([
         tradeRow({ TransactionType: "BUY", Quantity: "100", ExecutionID: "e1" }),
         tradeRow({ TransactionType: "COVER", Quantity: "100", ExecutionID: "e2" }),
@@ -78,26 +82,49 @@ describe("parseIbritActivityCsv", () => {
     ]);
   });
 
-  it("skips cancel (CA) and correct (CO) records", () => {
-    const execs = parseIbritActivityCsv(
+  it("returns cancel (CA) and correct (CO) records as corrections, not executions", () => {
+    const { executions, corrections } = parseIbritActivityCsv(
       activityFile([
-        tradeRow({ TransactionType: "CA", ExecutionID: "e1" }),
-        tradeRow({ TransactionType: "CO", ExecutionID: "e2" }),
+        tradeRow({ TransactionType: "BUY", Quantity: "100", ExecutionID: "e0" }),
+        tradeRow({ TransactionType: "CA", ExecutionID: "e1", TradeID: "t1" }),
+        tradeRow({ TransactionType: "CO", ExecutionID: "e2", TradeID: "t1" }),
       ]),
     );
-    expect(execs).toEqual([]);
+    expect(executions.map((e) => e.brokerExecId)).toEqual(["e0"]);
+    expect(corrections).toEqual([
+      {
+        transactionType: "CA",
+        accountId: "U0000014",
+        ticker: "MRO",
+        tradeId: "t1",
+        executionId: "e1",
+        dateTime: "20211222 11:38:41 AM",
+      },
+      {
+        transactionType: "CO",
+        accountId: "U0000014",
+        ticker: "MRO",
+        tradeId: "t1",
+        executionId: "e2",
+        dateTime: "20211222 11:38:41 AM",
+      },
+    ]);
+  });
+
+  it("reports no corrections for IBKR's sample file", () => {
+    expect(parseIbritActivityCsv(SAMPLE_ACTIVITY).corrections).toEqual([]);
   });
 
   it("skips a trade row with no ExecutionID", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const execs = parseIbritActivityCsv(activityFile([tradeRow({ ExecutionID: "" })]));
+    const execs = executionsOf(activityFile([tradeRow({ ExecutionID: "" })]));
     expect(execs).toEqual([]);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 
   it("keeps a quoted field containing a comma inside one column", () => {
-    const execs = parseIbritActivityCsv(
+    const execs = executionsOf(
       activityFile([tradeRow({ SecurityDescription: '"APPLE INC, COMMON STOCK"', Symbol: "AAPL" })]),
     );
     expect(execs).toHaveLength(1);
@@ -106,7 +133,7 @@ describe("parseIbritActivityCsv", () => {
   });
 
   it("uses the base currency as commission currency for Forex (AssetType CASH)", () => {
-    const execs = parseIbritActivityCsv(
+    const execs = executionsOf(
       activityFile([tradeRow({ AssetType: "CASH", Currency: "EUR", BaseCurrency: "USD" })]),
     );
     expect(execs[0].currency).toBe("EUR");
@@ -119,11 +146,11 @@ describe("parseIbritActivityCsv", () => {
   });
 
   it("accepts CRLF line endings", () => {
-    expect(parseIbritActivityCsv(SAMPLE_ACTIVITY.replace(/\n/g, "\r\n"))).toHaveLength(1);
+    expect(executionsOf(SAMPLE_ACTIVITY.replace(/\n/g, "\r\n"))).toHaveLength(1);
   });
 
   it("returns an empty list for an empty file", () => {
-    expect(parseIbritActivityCsv("")).toEqual([]);
+    expect(executionsOf("")).toEqual([]);
   });
 });
 
