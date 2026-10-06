@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronDown, ChevronUp, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { CountdownCircle } from "./countdown-circle";
+import { IbritConnect } from "./ibrit-connect";
 import { ProRequiredBanner } from "@/components/billing/pro-required-banner";
 import type { SubscriptionTier } from "@/lib/billing/tier";
 
@@ -278,13 +279,16 @@ export function TabBroker({ userTier }: TabBrokerProps) {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-text-main">ברוקר — IBKR</h2>
-        <p className="text-sm text-text-dim mt-1">חיבור ל-Interactive Brokers דרך Flex Web Service</p>
+        <p className="text-sm text-text-dim mt-1">חיבור לחשבון Interactive Brokers לסנכרון אוטומטי של הטריידים</p>
       </div>
 
       {userTier === "Free" && <ProRequiredBanner feature="סנכרון אוטומטי מ-IBKR" />}
 
+      <IbritConnect />
+
       <div className="panel p-6">
-        <h3 className="text-sm font-medium text-text-main mb-4">Flex Web Service</h3>
+        <h3 className="text-sm font-medium text-text-main mb-1">Flex Web Service</h3>
+        <p className="text-sm text-text-dim mb-4">השיטה הקודמת, דרך Flex Query שבונים בעצמכם.</p>
 
         <SetupGuide open={guideOpen} onToggle={() => setGuideOpen((o) => !o)} />
 
