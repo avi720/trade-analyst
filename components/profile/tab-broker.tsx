@@ -1,96 +1,22 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronDown, ChevronUp, CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { CountdownCircle } from "./countdown-circle";
+import { useState, useEffect, useCallback } from "react";
 import { IbritConnect } from "./ibrit-connect";
-import { formatRelativeTime, type ConnectionStatus } from "./broker-connection";
+import type { ConnectionStatus } from "./broker-connection";
 import { IBRIT_BROKER_NAME } from "@/lib/ibkr/broker-names";
 import { ProRequiredBanner } from "@/components/billing/pro-required-banner";
 import type { SubscriptionTier } from "@/lib/billing/tier";
 
-const TOAST_DURATION = 10;
+const POLL_INTERVAL_MS = 2_000;
+// The first sync loads the account's whole history and may run up to the
+// connect route's 300s maxDuration.
+const POLL_TIMEOUT_MS = 300_000;
 
-const REQUIRED_FIELDS = [
-  "ClientAccountID", "CurrencyPrimary", "AssetClass", "Symbol",
-  "OrderID", "ExecID", "OrderTime", "Date/Time",
-  "Buy/Sell", "Quantity", "Price", "NetCash",
-  "Commission", "CommissionCurrency", "OrderType",
-];
-
-interface ActivityTestResult {
-  ok: boolean;
-  error?: string;
-}
-
-function SetupGuide({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  return (
-    <div className="border border-border rounded-md mb-6">
-      <button
-        onClick={onToggle}
-        aria-expanded={open}
-        className="w-full flex items-center justify-between p-4 text-right text-sm font-medium text-text-main hover:bg-input-bg transition-colors"
-      >
-        <span className="flex items-center gap-2 text-amber">
-          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          מדריך הגדרה — Flex Web Service
-        </span>
-      </button>
-      {open && (
-        <div className="p-4 border-t border-border space-y-4 text-sm text-text-dim">
-          <div>
-            <p className="text-text-main font-medium mb-1">שלב 1 — הפעלת Flex Web Service</p>
-            <p>
-              ב-IBKR Portal:{" "}
-              <span className="text-text-main">Settings → Account Settings → Reports → Flex Web Service</span>
-              {" "}→ לחץ "Enable" וקבל את ה-Token.
-            </p>
-          </div>
-          <div>
-            <p className="text-text-main font-medium mb-1">שלב 2 — יצירת Activity Flex Query</p>
-            <p>
-              ב-IBKR Portal:{" "}
-              <span className="text-text-main">Reports → Flex Queries → Create New → Activity</span>
-              <br />
-              טווח: <span className="text-text-main">Last 90 Days</span> (או יותר לסנכרון ראשוני)
-              <br />
-              פורמט תאריך: <span className="font-mono text-green">dd/MM/yyyy</span> — פורמט שעה:{" "}
-              <span className="font-mono text-green">HH:mm:ss TimeZone</span>
-            </p>
-          </div>
-          <div>
-            <p className="text-text-main font-medium mb-2">15 השדות הנדרשים:</p>
-            <div className="grid grid-cols-2 gap-1">
-              {REQUIRED_FIELDS.map((f) => (
-                <span key={f} className="font-mono text-xs text-green bg-green-tint px-2 py-1 rounded">
-                  {f}
-                </span>
-              ))}
-            </div>
-          </div>
-          <p className="text-sm text-text-dim">
-            שלב 3: העתק את ה-Token ואת ה-Query ID לשדות למטה.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function QueryStatusRow({ label, result }: { label: string; result: ActivityTestResult }) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      {result.ok ? (
-        <CheckCircle size={14} className="text-green shrink-0" />
-      ) : (
-        <XCircle size={14} className="text-red shrink-0" />
-      )}
-      <span className={result.ok ? "text-text-main" : "text-red"}>{label}</span>
-      {!result.ok && result.error && (
-        <span className="text-text-dim text-sm truncate">{result.error}</span>
-      )}
-    </div>
-  );
+async function fetchConnection(): Promise<ConnectionStatus | null> {
+  const res = await fetch("/api/ibkr/connection");
+  if (!res.ok) return null;
+  const json = await res.json();
+  return (json.connection as ConnectionStatus | undefined) ?? null;
 }
 
 interface TabBrokerProps {
@@ -98,173 +24,41 @@ interface TabBrokerProps {
 }
 
 export function TabBroker({ userTier }: TabBrokerProps) {
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [exportingCsv, setExportingCsv] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveOk, setSaveOk] = useState(false);
-  const [toastSecondsLeft, setToastSecondsLeft] = useState(0);
-  const [testResult, setTestResult] = useState<{ activity: ActivityTestResult; firstSuccess?: boolean } | null>(null);
-  const [testError, setTestError] = useState<string | null>(null);
   const [conn, setConn] = useState<ConnectionStatus | null>(null);
-  const [initialSyncRunning, setInitialSyncRunning] = useState(false);
-  const lastSyncAtBeforeSave = useRef<string | null>(null);
+  const [firstSyncRunning, setFirstSyncRunning] = useState(false);
 
-  const [flexToken, setFlexToken] = useState("");
-  const [queryIdActivity, setQueryIdActivity] = useState("");
-
-  const fetchConnection = useCallback(async (): Promise<ConnectionStatus | null> => {
-    const res = await fetch("/api/ibkr/connection");
-    if (!res.ok) return null;
-    const json = await res.json();
-    return (json.connection as ConnectionStatus | undefined) ?? null;
-  }, []);
-
-  const applyConnection = useCallback((c: ConnectionStatus | null) => {
-    if (!c) return;
-    setConn(c);
-    // An IBRIT connection reuses the query-ID column; keep it out of the Flex form.
-    setQueryIdActivity(c.brokerName === IBRIT_BROKER_NAME ? "" : c.flexQueryIdActivity ?? "");
-  }, []);
-
-  const loadConnection = useCallback(async () => {
-    applyConnection(await fetchConnection());
-  }, [fetchConnection, applyConnection]);
-
-  // Split from loadConnection so the state update is visibly in a `.then` and
-  // can be dropped if the tab unmounts before the request lands.
   useEffect(() => {
     let cancelled = false;
     void fetchConnection().then((c) => {
-      if (!cancelled) applyConnection(c);
+      if (!cancelled) setConn(c);
     });
     return () => { cancelled = true; };
-  }, [fetchConnection, applyConnection]);
+  }, []);
 
-  // The countdown is seeded alongside setSaveOk(true) in handleSave; this
-  // effect only owns the ticking.
+  // The connect route clears lastSyncAt; the first background sync writes it.
   useEffect(() => {
-    if (!saveOk) return;
-    const interval = setInterval(() => {
-      setToastSecondsLeft((prev) => {
-        if (prev <= 1) { clearInterval(interval); setSaveOk(false); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [saveOk]);
-
-  useEffect(() => {
-    if (!initialSyncRunning) return;
-    let elapsed = 0;
+    if (!firstSyncRunning) return;
+    const startedAt = Date.now();
     const interval = setInterval(async () => {
-      elapsed += 2;
-      const res = await fetch("/api/ibkr/connection");
-      if (res.ok) {
-        const json = await res.json();
-        const newSyncAt: string | null = json.connection?.lastSyncAt ?? null;
-        if (newSyncAt && newSyncAt !== lastSyncAtBeforeSave.current) {
-          setInitialSyncRunning(false);
-          applyConnection(json.connection ?? null);
-          clearInterval(interval);
-          return;
-        }
+      const c = await fetchConnection();
+      if (c?.lastSyncAt) {
+        setConn(c);
+        setFirstSyncRunning(false);
+      } else if (Date.now() - startedAt >= POLL_TIMEOUT_MS) {
+        setFirstSyncRunning(false);
       }
-      if (elapsed >= 120) { setInitialSyncRunning(false); clearInterval(interval); }
-    }, 2000);
+    }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [initialSyncRunning, applyConnection]);
+  }, [firstSyncRunning]);
 
-  // The connect route clears lastSyncAt, so the poll above ends once the first
-  // background sync writes it.
-  function handleIbritConnected() {
-    lastSyncAtBeforeSave.current = null;
-    setInitialSyncRunning(true);
-    loadConnection();
-  }
+  const handleConnected = useCallback(() => {
+    setFirstSyncRunning(true);
+    void fetchConnection().then(setConn);
+  }, []);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setSaveError(null);
-    setSaveOk(false);
-    lastSyncAtBeforeSave.current = conn?.lastSyncAt ?? null;
-    try {
-      const res = await fetch("/api/ibkr/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ flexToken, flexQueryIdActivity: queryIdActivity }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setSaveError(typeof json.error === "string" ? json.error : JSON.stringify(json.error));
-      } else {
-        setSaveOk(true);
-        setToastSecondsLeft(TOAST_DURATION);
-        setFlexToken("");
-        setInitialSyncRunning(true);
-        loadConnection();
-      }
-    } catch {
-      setSaveError("שגיאת רשת");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleTest() {
-    setTesting(true);
-    setTestResult(null);
-    setTestError(null);
-    try {
-      const res = await fetch("/api/ibkr/test-connection", { method: "POST" });
-      const json = await res.json();
-      if (!res.ok) {
-        setTestError(json.error ?? "שגיאה");
-      } else {
-        setTestResult(json);
-        if (json.firstSuccess) setGuideOpen(false);
-      }
-    } catch {
-      setTestError("שגיאת רשת");
-    } finally {
-      setTesting(false);
-    }
-  }
-
-  async function handleExportCsv() {
-    setExportingCsv(true);
-    setExportError(null);
-    try {
-      const res = await fetch("/api/export/activity-csv");
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        setExportError(json.error ?? "שגיאה בייצוא CSV");
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `activity_${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setExportError("שגיאת רשת בייצוא CSV");
-    } finally {
-      setExportingCsv(false);
-    }
-  }
-
-  const isIbrit = conn?.brokerName === IBRIT_BROKER_NAME;
-  const flexConn = isIbrit ? null : conn;
-
-  const syncStatusColor =
-    conn?.lastSyncStatus === "SUCCESS" ? "text-green" :
-    conn?.lastSyncStatus === "ERROR" ? "text-red" :
-    "text-text-dim";
+  // A leftover Flex connection still syncs on the server, but users only see
+  // IBRIT: they connect it here and it replaces the Flex one.
+  const ibritConn = conn?.brokerName === IBRIT_BROKER_NAME ? conn : null;
 
   return (
     <div className="space-y-6">
@@ -275,122 +69,7 @@ export function TabBroker({ userTier }: TabBrokerProps) {
 
       {userTier === "Free" && <ProRequiredBanner feature="סנכרון אוטומטי מ-IBKR" />}
 
-      <IbritConnect
-        connection={isIbrit ? conn : null}
-        syncing={isIbrit && initialSyncRunning}
-        onConnected={handleIbritConnected}
-      />
-
-      <div className="panel p-6">
-        <h3 className="text-sm font-medium text-text-main mb-1">Flex Web Service</h3>
-        <p className="text-sm text-text-dim mb-4">השיטה הקודמת, דרך Flex Query שבונים בעצמכם.</p>
-
-        <SetupGuide open={guideOpen} onToggle={() => setGuideOpen((o) => !o)} />
-
-        <form onSubmit={handleSave} className="space-y-4">
-          <div>
-            <label className="block text-sm text-text-dim mb-1">Flex Token</label>
-            <input
-              type="password"
-              value={flexToken}
-              onChange={(e) => setFlexToken(e.target.value)}
-              placeholder={flexConn ? "••••••••  (נדרש להזין מחדש לשינויים)" : "הדבק את ה-Flex Token כאן"}
-              className="w-full bg-panel border border-border rounded px-3 py-2 text-sm text-text-main placeholder-text-mute outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber focus-visible:outline-offset-2 focus:border-amber font-mono"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-text-dim mb-1">Query ID — Activity</label>
-            <input
-              type="text"
-              value={queryIdActivity}
-              onChange={(e) => setQueryIdActivity(e.target.value)}
-              placeholder="123456"
-              className="w-full bg-panel border border-border rounded px-3 py-2 text-sm text-text-main placeholder-text-mute outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber focus-visible:outline-offset-2 focus:border-amber font-mono"
-            />
-          </div>
-
-          {saveError && <p className="text-red text-sm">{saveError}</p>}
-
-          {saveOk && (
-            <div className="flex items-center gap-2 text-green text-sm">
-              <CountdownCircle remaining={toastSecondsLeft} total={TOAST_DURATION} />
-              <span>נשמר בהצלחה ✓</span>
-            </div>
-          )}
-
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 bg-amber text-black text-sm font-medium rounded hover:bg-amber-dark disabled:opacity-50 transition-colors"
-            >
-              {saving ? "שומר..." : "שמור"}
-            </button>
-            <button
-              type="button"
-              onClick={handleTest}
-              disabled={testing || !flexConn}
-              className="px-4 py-2 border border-border text-text-main text-sm rounded hover:border-shade-2 disabled:opacity-40 transition-colors"
-            >
-              {testing ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 size={14} className="animate-spin" /> בודק...
-                </span>
-              ) : "Test Connection"}
-            </button>
-          </div>
-        </form>
-
-        {testError && <p className="mt-3 text-red text-sm">{testError}</p>}
-        {testResult && (
-          <div className="mt-4 space-y-2">
-            <QueryStatusRow label="Activity Flex Query" result={testResult.activity} />
-          </div>
-        )}
-
-        {flexConn && (
-          <div className="mt-6 pt-4 border-t border-border space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-text-dim">סנכרון אחרון</span>
-              <span className={initialSyncRunning ? "text-amber" : syncStatusColor}>
-                {initialSyncRunning ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 size={12} className="animate-spin inline" />
-                    סנכרון ראשוני מתבצע...
-                  </span>
-                ) : (
-                  <>
-                    {formatRelativeTime(flexConn.lastSyncAt)}{" "}
-                    {flexConn.lastSyncStatus && `(${flexConn.lastSyncStatus})`}
-                  </>
-                )}
-              </span>
-            </div>
-            {flexConn.lastSyncError && !initialSyncRunning && (
-              <p className="text-red text-xs">{flexConn.lastSyncError}</p>
-            )}
-            <div className="pt-2 space-y-2">
-              <button
-                onClick={handleExportCsv}
-                disabled={exportingCsv || !flexConn}
-                className="px-3 py-1.5 border border-border text-text-dim text-sm rounded hover:border-shade-2 hover:text-text-main disabled:opacity-40 transition-colors"
-              >
-                {exportingCsv ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 size={12} className="animate-spin" /> מייצא...
-                  </span>
-                ) : "ייצא Activity כ-CSV"}
-              </button>
-              {exportError && (
-                <p role="alert" className="text-red text-xs border border-red/30 bg-red/5 rounded px-3 py-2">
-                  {exportError}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      <IbritConnect connection={ibritConn} syncing={firstSyncRunning} onConnected={handleConnected} />
     </div>
   );
 }
