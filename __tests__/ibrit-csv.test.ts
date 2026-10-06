@@ -145,6 +145,47 @@ describe("parseIbritActivityCsv", () => {
     expect(() => parseIbritActivityCsv(truncated)).toThrow(/trailer record count 8/);
   });
 
+  // Shape of a real tradeanalyst-ws response: Position and Activity back to
+  // back, each with its own header/trailer, trailing comma on every record,
+  // 24-hour DateTime. Values are synthetic.
+  const WEB_SERVICE_RESPONSE = [
+    "H,U0000001,Position,20261005,15:34:18,20260917,1.994,",
+    "Type,AccountID,ConID,SecurityID,Symbol,BBTicker,FIGI,SecurityDescription,AssetType,Currency,BaseCurrency,Quantity,QuantityInBase,CostPrice,CostBasis,CostBasisInBase,MarketPrice,MarketValue,MarketValueInBase,UnrealizedPL,UnrealizedPLInBase,OpenDateTime,FxRateToBase,ReportDate,SettledQuantity,SettledQuantityInBase,MasterAccountID,Van,AccruedInt,OriginatingOrderID,Multiplier,ActionID,",
+    "D,U0000001,320227571,US46090E1038,QQQ,QQQ,BBG000BSWKH7,INVESCO QQQ TRUST SERIES 1,STK,USD,USD,10,0,500,5000,5000,700,7000,7000,2000,2000,,1,20260917,0,0,I000001,,0,,1,,",
+    "T,4,",
+    "H,U0000001,Activity,20261005,15:34:18,20260917,1.994,",
+    `${COLUMNS},`,
+    "D,U0000001,320227571,US46090E1038,QQQ,QQQ,BBG000BSWKH7,INVESCO QQQ TRUST SERIES 1,STK,USD,USD,20260917,20260917 15:57:37,20260918,20260917;15:57:36,BUY,Y,0.3,717.45,-215.235,,-2,0,-217.235,-217.235,0,0,10000000001,,TRADE INVESCO QQQ TRUST SERIES 1,1,,,MM,I000001,,,5000000001,,40000000001,00012971.00000001.01.01,217.235,,,EXECUTION,LMT,,01af25f3.0001fff2.00000001.0001,",
+    "T,4,",
+  ].join("\n");
+
+  it("reads only the Activity section of a Position + Activity web-service response", () => {
+    const { executions } = parseIbritActivityCsv(WEB_SERVICE_RESPONSE);
+    expect(executions).toHaveLength(1);
+    expect(executions[0]).toMatchObject({
+      brokerExecId: "00012971.00000001.01.01",
+      ticker: "QQQ",
+      side: "BUY",
+      quantity: 0.3,
+      price: 717.45,
+      commission: 2,
+      netCash: -217.235,
+      // 15:57:37 US/Eastern in September (EDT, UTC-4)
+      executedAt: new Date("2026-09-17T19:57:37.000Z"),
+      orderTimeIso: "2026-09-17T19:57:36.000Z",
+    });
+  });
+
+  it("validates each section's trailer separately", () => {
+    const badPositionTrailer = WEB_SERVICE_RESPONSE.replace("T,4,\nH,U0000001,Activity", "T,5,\nH,U0000001,Activity");
+    expect(() => parseIbritActivityCsv(badPositionTrailer)).toThrow(/Position trailer record count 5/);
+  });
+
+  it("throws when the last section has no trailer (cut-off download)", () => {
+    const cutOff = WEB_SERVICE_RESPONSE.split("\n").slice(0, -1).join("\n");
+    expect(() => parseIbritActivityCsv(cutOff)).toThrow(/Activity section has no trailer/);
+  });
+
   it("accepts CRLF line endings", () => {
     expect(executionsOf(SAMPLE_ACTIVITY.replace(/\n/g, "\r\n"))).toHaveLength(1);
   });

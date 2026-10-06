@@ -200,45 +200,64 @@ function toCorrection(row: Record<string, string>): IbritCorrection | null {
   };
 }
 
-/**
- * Parses an IBRIT Activity CSV into its trade executions and any cancel /
- * correction records. Other non-trade rows are dropped; trade rows missing a
- * required field are skipped with a warning. Throws if the trailer's record
- * count doesn't match the file, since a truncated download must not be
- * processed as if it were complete.
- */
-export function parseIbritActivityCsv(csv: string, broker: string = "IBKR"): IbritActivity {
-  const lines = csv.split(/\r?\n/).filter((line) => line.trim() !== "");
-  if (lines.length === 0) return { executions: [], corrections: [] };
-
-  let columns: string[] | null = null;
-  let trailerCount: number | null = null;
+// Splits a Web Service response into its H…T sections and returns the data
+// rows of every section whose header names `fileType`. One response carries
+// several files back to back (e.g. Position then Activity), and a date-range
+// fetch concatenates them per report date.
+function readSectionRows(csv: string, fileType: string): Record<string, string>[] {
   const rows: Record<string, string>[] = [];
+  let section: { type: string; lineCount: number; columns: string[] | null } | null = null;
 
-  for (const line of lines) {
+  for (const line of csv.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
     const fields = splitCsvLine(line);
     const recordType = fields[0]?.trim();
 
+    if (recordType === "H") {
+      if (section) throw new Error(`IBRIT: ${section.type} section has no trailer record (truncated file?)`);
+      section = { type: fields[2]?.trim() ?? "", lineCount: 1, columns: null };
+      continue;
+    }
+    if (!section) throw new Error("IBRIT: record outside a header/trailer section");
+    section.lineCount++;
+
     if (recordType === "Type") {
-      columns = fields.map((f) => f.trim());
+      section.columns = fields.map((f) => f.trim());
     } else if (recordType === "D") {
-      if (!columns) throw new Error("IBRIT Activity: data record before the column header row");
+      if (section.type !== fileType) continue;
+      const columns = section.columns;
+      if (!columns) throw new Error(`IBRIT: ${section.type} data record before the column header row`);
       const row: Record<string, string> = {};
       columns.forEach((name, i) => {
         row[name] = fields[i] ?? "";
       });
       rows.push(row);
     } else if (recordType === "T") {
-      trailerCount = toNumber(fields[1]);
+      // The trailer's count covers the whole section: header, column header, data and trailer.
+      const expected = toNumber(fields[1]);
+      if (expected !== section.lineCount) {
+        throw new Error(
+          `IBRIT: ${section.type} trailer record count ${expected} does not match ${section.lineCount} lines (truncated file?)`,
+        );
+      }
+      section = null;
     }
   }
 
-  // The trailer's count covers every line in the file: header, column header, data and trailer.
-  if (trailerCount !== null && trailerCount !== lines.length) {
-    throw new Error(
-      `IBRIT Activity: trailer record count ${trailerCount} does not match ${lines.length} lines (truncated file?)`,
-    );
-  }
+  if (section) throw new Error(`IBRIT: ${section.type} section has no trailer record (truncated file?)`);
+  return rows;
+}
+
+/**
+ * Parses an IBRIT Web Service response into the Activity file's trade
+ * executions and any cancel / correction records. Other file types in the
+ * response (Position) and non-trade Activity rows are ignored; trade rows
+ * missing a required field are skipped with a warning. Throws if any section's
+ * trailer count doesn't match, since a truncated download must not be
+ * processed as if it were complete.
+ */
+export function parseIbritActivityCsv(csv: string, broker: string = "IBKR"): IbritActivity {
+  const rows = readSectionRows(csv, "Activity");
 
   return {
     executions: rows.flatMap((row) => {
