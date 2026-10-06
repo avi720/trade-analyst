@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronDown, ChevronUp, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { CountdownCircle } from "./countdown-circle";
 import { IbritConnect } from "./ibrit-connect";
+import { formatRelativeTime, type ConnectionStatus } from "./broker-connection";
+import { IBRIT_BROKER_NAME } from "@/lib/ibkr/broker-names";
 import { ProRequiredBanner } from "@/components/billing/pro-required-banner";
 import type { SubscriptionTier } from "@/lib/billing/tier";
 
@@ -16,29 +18,9 @@ const REQUIRED_FIELDS = [
   "Commission", "CommissionCurrency", "OrderType",
 ];
 
-interface ConnectionStatus {
-  id?: string;
-  flexQueryIdActivity?: string;
-  pricePollingIntervalMin?: number;
-  lastSyncAt?: string | null;
-  lastSyncStatus?: string | null;
-  lastSyncError?: string | null;
-}
-
 interface ActivityTestResult {
   ok: boolean;
   error?: string;
-}
-
-function formatRelativeTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "עכשיו";
-  if (mins < 60) return `לפני ${mins} דק'`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `לפני ${hours} שע'`;
-  return new Date(iso).toLocaleDateString("he-IL");
 }
 
 function SetupGuide({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -143,7 +125,8 @@ export function TabBroker({ userTier }: TabBrokerProps) {
   const applyConnection = useCallback((c: ConnectionStatus | null) => {
     if (!c) return;
     setConn(c);
-    setQueryIdActivity(c.flexQueryIdActivity ?? "");
+    // An IBRIT connection reuses the query-ID column; keep it out of the Flex form.
+    setQueryIdActivity(c.brokerName === IBRIT_BROKER_NAME ? "" : c.flexQueryIdActivity ?? "");
   }, []);
 
   const loadConnection = useCallback(async () => {
@@ -184,10 +167,7 @@ export function TabBroker({ userTier }: TabBrokerProps) {
         const newSyncAt: string | null = json.connection?.lastSyncAt ?? null;
         if (newSyncAt && newSyncAt !== lastSyncAtBeforeSave.current) {
           setInitialSyncRunning(false);
-          if (json.connection) {
-            setConn(json.connection);
-            setQueryIdActivity(json.connection.flexQueryIdActivity ?? "");
-          }
+          applyConnection(json.connection ?? null);
           clearInterval(interval);
           return;
         }
@@ -195,7 +175,15 @@ export function TabBroker({ userTier }: TabBrokerProps) {
       if (elapsed >= 120) { setInitialSyncRunning(false); clearInterval(interval); }
     }, 2000);
     return () => clearInterval(interval);
-  }, [initialSyncRunning]);
+  }, [initialSyncRunning, applyConnection]);
+
+  // The connect route clears lastSyncAt, so the poll above ends once the first
+  // background sync writes it.
+  function handleIbritConnected() {
+    lastSyncAtBeforeSave.current = null;
+    setInitialSyncRunning(true);
+    loadConnection();
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -270,6 +258,9 @@ export function TabBroker({ userTier }: TabBrokerProps) {
     }
   }
 
+  const isIbrit = conn?.brokerName === IBRIT_BROKER_NAME;
+  const flexConn = isIbrit ? null : conn;
+
   const syncStatusColor =
     conn?.lastSyncStatus === "SUCCESS" ? "text-green" :
     conn?.lastSyncStatus === "ERROR" ? "text-red" :
@@ -284,7 +275,11 @@ export function TabBroker({ userTier }: TabBrokerProps) {
 
       {userTier === "Free" && <ProRequiredBanner feature="סנכרון אוטומטי מ-IBKR" />}
 
-      <IbritConnect />
+      <IbritConnect
+        connection={isIbrit ? conn : null}
+        syncing={isIbrit && initialSyncRunning}
+        onConnected={handleIbritConnected}
+      />
 
       <div className="panel p-6">
         <h3 className="text-sm font-medium text-text-main mb-1">Flex Web Service</h3>
@@ -299,7 +294,7 @@ export function TabBroker({ userTier }: TabBrokerProps) {
               type="password"
               value={flexToken}
               onChange={(e) => setFlexToken(e.target.value)}
-              placeholder={conn ? "••••••••  (נדרש להזין מחדש לשינויים)" : "הדבק את ה-Flex Token כאן"}
+              placeholder={flexConn ? "••••••••  (נדרש להזין מחדש לשינויים)" : "הדבק את ה-Flex Token כאן"}
               className="w-full bg-panel border border-border rounded px-3 py-2 text-sm text-text-main placeholder-text-mute outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber focus-visible:outline-offset-2 focus:border-amber font-mono"
             />
           </div>
@@ -335,7 +330,7 @@ export function TabBroker({ userTier }: TabBrokerProps) {
             <button
               type="button"
               onClick={handleTest}
-              disabled={testing || !conn}
+              disabled={testing || !flexConn}
               className="px-4 py-2 border border-border text-text-main text-sm rounded hover:border-shade-2 disabled:opacity-40 transition-colors"
             >
               {testing ? (
@@ -354,7 +349,7 @@ export function TabBroker({ userTier }: TabBrokerProps) {
           </div>
         )}
 
-        {conn && (
+        {flexConn && (
           <div className="mt-6 pt-4 border-t border-border space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-text-dim">סנכרון אחרון</span>
@@ -366,19 +361,19 @@ export function TabBroker({ userTier }: TabBrokerProps) {
                   </span>
                 ) : (
                   <>
-                    {formatRelativeTime(conn.lastSyncAt)}{" "}
-                    {conn.lastSyncStatus && `(${conn.lastSyncStatus})`}
+                    {formatRelativeTime(flexConn.lastSyncAt)}{" "}
+                    {flexConn.lastSyncStatus && `(${flexConn.lastSyncStatus})`}
                   </>
                 )}
               </span>
             </div>
-            {conn.lastSyncError && !initialSyncRunning && (
-              <p className="text-red text-xs">{conn.lastSyncError}</p>
+            {flexConn.lastSyncError && !initialSyncRunning && (
+              <p className="text-red text-xs">{flexConn.lastSyncError}</p>
             )}
             <div className="pt-2 space-y-2">
               <button
                 onClick={handleExportCsv}
-                disabled={exportingCsv || !conn}
+                disabled={exportingCsv || !flexConn}
                 className="px-3 py-1.5 border border-border text-text-dim text-sm rounded hover:border-shade-2 hover:text-text-main disabled:opacity-40 transition-colors"
               >
                 {exportingCsv ? (

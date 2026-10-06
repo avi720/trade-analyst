@@ -19,4 +19,6 @@ jobs:
           # `.ok` is absent on the `{"skipped":true}` no-active-connections
           # response, so that case fails the run too — by design.
           expect: '.ok == true'
-          max-time: '180'   # route polls IBKR up to ~40s, plus cold start
+          # Above the route's 300s maxDuration: an IBRIT first sync (history
+          # backfill) can run long, and Flex polls IBKR up to ~40s per connection.
+          max-time: '320'

@@ -3,14 +3,19 @@ import { decryptToken } from '@/lib/ibkr/encrypt'
 import { fetchFlexQuery, IbkrTransientError } from '@/lib/ibkr/flex-client'
 import { parseActivityXml } from '@/lib/ibkr/parse-flex-xml'
 import { processExecutions } from '@/lib/ibkr/process-executions'
+import { IBRIT_BROKER_NAME } from '@/lib/ibkr/broker-names'
+import { syncIbritConnection } from '@/lib/ibkr/ibrit-sync'
 import { redactUserId } from '@/lib/log/redact'
 import type { Database } from '@/lib/db/types'
 
 type Admin = SupabaseClient<Database>
 
+// For IBRIT connections (brokerName IBKR_IBRIT) the two flex* columns hold the
+// IBRIT Web Service token and query ID: same shape, so no separate columns.
 export interface ConnectionRow {
   id: string
   userId: string
+  brokerName: string
   flexTokenEncrypted: string
   flexQueryIdActivity: string
 }
@@ -24,14 +29,21 @@ export interface ConnectionResult {
   failedExecutions: number
 }
 
-// Full IBKR Flex fetch + parse + processExecutions + BrokerEvent audit +
-// BrokerConnection status update for one connection. Shared by the
-// scheduled cron ([app/api/cron/ibkr-sync/route.ts]) and the on-demand
-// admin trigger ([app/api/admin/ibkr/[connectionId]/sync/route.ts]).
-//
-// Extracted verbatim from the cron route in Phase 3 of the admin
-// rollout — no behavior change; the cron becomes a thin caller.
+// Fetch + parse + processExecutions + BrokerEvent audit + BrokerConnection
+// status update for one connection, Flex or IBRIT by brokerName. Shared by the
+// scheduled cron ([app/api/cron/ibkr-sync/route.ts]), the on-demand admin
+// trigger ([app/api/admin/ibkr/[connectionId]/sync/route.ts]) and the IBRIT
+// connect route's first sync.
 export async function syncOneConnection(
+  admin: Admin,
+  conn: ConnectionRow,
+): Promise<ConnectionResult> {
+  if (conn.brokerName === IBRIT_BROKER_NAME) return syncIbritConnection(admin, conn)
+  return syncFlexConnection(admin, conn)
+}
+
+// Extracted verbatim from the cron route in Phase 3 of the admin rollout.
+async function syncFlexConnection(
   admin: Admin,
   conn: ConnectionRow,
 ): Promise<ConnectionResult> {
@@ -152,7 +164,7 @@ export async function syncActiveConnections(
 ): Promise<ConnectionResult[]> {
   const { data: conns, error: connErr } = await admin
     .from('BrokerConnection')
-    .select('id, userId, flexTokenEncrypted, flexQueryIdActivity')
+    .select('id, userId, brokerName, flexTokenEncrypted, flexQueryIdActivity')
     .eq('isActive', true)
 
   if (connErr) {

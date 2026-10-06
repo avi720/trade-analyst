@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyCronSecret } from '@/lib/auth/cron-secret'
 import { syncActiveConnections } from '@/lib/ibkr/sync-pipeline'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 // Secured with CRON_SECRET header — called by GitHub Actions at 13:00 & 20:00 UTC daily.
 // The per-connection sync logic lives in lib/ibkr/sync-pipeline.ts and is

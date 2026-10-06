@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, ExternalLink, Mail } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, Loader2, Mail } from "lucide-react";
+import { formatRelativeTime, type ConnectionStatus } from "./broker-connection";
 
 // Login entry points, not deep links: the Third-Party Data Feeds page sits
 // behind the Portal login, and a deep link doesn't survive the SSO redirect.
@@ -99,8 +100,49 @@ function Guide({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   );
 }
 
-export function IbritConnect() {
-  const [guideOpen, setGuideOpen] = useState(true);
+interface IbritConnectProps {
+  // The user's connection when it is an IBRIT one, null otherwise.
+  connection: ConnectionStatus | null;
+  syncing: boolean;
+  onConnected: () => void;
+}
+
+function SyncStatus({ connection, syncing }: { connection: ConnectionStatus; syncing: boolean }) {
+  if (syncing) {
+    return (
+      <p className="flex items-center gap-2 text-amber">
+        <Loader2 size={12} className="animate-spin" />
+        טוען את היסטוריית החשבון מ-IBKR...
+      </p>
+    );
+  }
+  if (!connection.lastSyncAt) {
+    return <p className="text-text-dim">הסנכרון הראשון עוד לא הסתיים</p>;
+  }
+  const failed = connection.lastSyncStatus === "ERROR";
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between">
+        <span className="text-text-dim">סנכרון אחרון</span>
+        <span className={failed ? "text-red" : "text-text-main"}>
+          {formatRelativeTime(connection.lastSyncAt)}
+          {failed ? " · נכשל" : ""}
+        </span>
+      </div>
+      {failed && connection.lastSyncError && (
+        <p dir="ltr" className="text-red text-xs font-mono break-words">
+          {connection.lastSyncError}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function IbritConnect({ connection, syncing, onConnected }: IbritConnectProps) {
+  // null until the user toggles it: open for a new user, closed once connected.
+  // The connection loads after mount, so this can't be a one-time initial value.
+  const [guideToggled, setGuideToggled] = useState<boolean | null>(null);
+  const guideOpen = guideToggled ?? !connection;
   const [token, setToken] = useState("");
   const [queryId, setQueryId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -131,7 +173,9 @@ export function IbritConnect() {
       }
       setSaved(true);
       setToken("");
-      setGuideOpen(false);
+      setQueryId("");
+      setGuideToggled(false);
+      onConnected();
     } catch {
       setError("שגיאת רשת");
     } finally {
@@ -147,7 +191,7 @@ export function IbritConnect() {
         החשבון.
       </p>
 
-      <Guide open={guideOpen} onToggle={() => setGuideOpen((o) => !o)} />
+      <Guide open={guideOpen} onToggle={() => setGuideToggled(!guideOpen)} />
 
       <form onSubmit={handleSave} className="space-y-4">
         <div>
@@ -160,7 +204,7 @@ export function IbritConnect() {
             autoComplete="off"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="הדביקו את ה-Token כאן"
+            placeholder={connection ? "••••••••  (להחלפה הדביקו Token חדש)" : "הדביקו את ה-Token כאן"}
             className={inputClass}
           />
         </div>
@@ -193,9 +237,15 @@ export function IbritConnect() {
           disabled={saving}
           className="px-4 py-2 bg-amber text-black text-sm font-medium rounded hover:bg-amber-dark disabled:opacity-50 transition-colors"
         >
-          {saving ? "מחבר..." : "חיבור"}
+          {saving ? "בודק מול IBKR..." : connection ? "עדכון" : "חיבור"}
         </button>
       </form>
+
+      {connection && (
+        <div className="mt-6 pt-4 border-t border-border text-sm">
+          <SyncStatus connection={connection} syncing={syncing} />
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptToken } from "@/lib/ibkr/encrypt";
 import { fetchFlexQuery } from "@/lib/ibkr/flex-client";
+import { IBRIT_BROKER_NAME } from "@/lib/ibkr/broker-names";
 import { parseActivityXml } from "@/lib/ibkr/parse-flex-xml";
 import { executionsToCsv } from "@/lib/ibkr/xml-to-csv";
 import type { Database } from "@/lib/db/types";
@@ -29,12 +30,15 @@ export async function GET() {
   const admin = createAdminClient();
   const { data: conn } = await admin
     .from("BrokerConnection")
-    .select("flexTokenEncrypted, flexQueryIdActivity")
+    .select("brokerName, flexTokenEncrypted, flexQueryIdActivity")
     .eq("userId", user.id)
     .maybeSingle();
 
   if (!conn) {
     return NextResponse.json({ error: "No IBKR connection configured" }, { status: 404 });
+  }
+  if (conn.brokerName === IBRIT_BROKER_NAME) {
+    return NextResponse.json({ error: "ייצוא CSV זמין כרגע רק לחיבור Flex" }, { status: 409 });
   }
 
   let token: string;
