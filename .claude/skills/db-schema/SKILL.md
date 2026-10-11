@@ -5,48 +5,67 @@ description: Migrations, schema changes, adding tables or columns, RLS policies,
 
 # DB schema, migrations & generated types
 
-Supabase Postgres, project id `nwvswntqrqqtwzrhzpmi`. Accessed through the Supabase JS
+Supabase Postgres: production `nwvswntqrqqtwzrhzpmi`, dev `sssichkbdqariguvqprc`. Accessed through the Supabase JS
 client (`@supabase/ssr` server, `@supabase/supabase-js` browser/scripts), typed via the
 generated `Database` type in [lib/db/types.ts](../../../lib/db/types.ts).
 
 ## Applying a schema change
 
-Apply schema changes via the **Supabase MCP `apply_migration` tool** — not by editing SQL
-files by hand, not via a local Supabase CLI, not via Prisma.
+Migrations are **files in git**, applied by the Supabase GitHub integration — not by the MCP
+`apply_migration` tool, not by `execute_sql`, not by Prisma.
+
+| Git branch | Supabase project | Applied when |
+|---|---|---|
+| `dev` | dev `sssichkbdqariguvqprc` | on every push to `dev` |
+| `main` | production `nwvswntqrqqtwzrhzpmi` | on every push/merge to `main` |
+
+Both integrations are set up in each project's **Settings → Integrations → GitHub**, working
+directory `.`, "Deploy to production" on, "Automatic branching" off (dev and prod are separate
+projects; Supabase Branching would only add billed preview databases).
+
+The method:
+
+1. Create `supabase/migrations/<yyyymmddHHMMSS>_<snake_name>.sql` with a **UTC** timestamp later
+   than the newest file there (`npx supabase migration new <snake_name>` does this).
+2. Commit and push to `dev`. The integration applies it to the dev project. Confirm with the MCP
+   `list_migrations` on `sssichkbdqariguvqprc`, or the project's Branches → logs on failure.
+3. Regenerate the types (below) and run `npm run build`.
+4. Merging `dev` into `main` applies it to production. Same version in both projects by
+   construction — the version is the filename.
+
+**`apply_migration` is blocked** by a `PreToolUse` hook. A version applied straight to a
+database exists there but not in `supabase/migrations/`, and the integration's next deploy
+fails on "remote migration versions not found in local migrations directory".
+
+**Never edit a migration that has already been pushed.** The integration only applies new
+versions, so an edited file silently diverges from both databases. Fix forward with a new file.
 
 Each migration should be idempotent-safe where practical (use `IF NOT EXISTS` / `IF EXISTS`
 for objects that may already have been created out-of-band).
 
-Never change the schema by hand in the dashboard or via `execute_sql`. Replaying the migration
-history onto an empty project (how the `Trade-Analysis-dev` preview DB was built) must reproduce
-production exactly; three hand-made changes broke that and had to be codified after the fact in
-`codify_out_of_band_prod_drift`.
+Never change the schema by hand in the dashboard or via `execute_sql`. Replaying
+`supabase/migrations/` onto an empty project must reproduce production exactly; three hand-made
+changes broke that and had to be codified after the fact in `codify_out_of_band_prod_drift`.
 
-Every migration goes to both projects — production `nwvswntqrqqtwzrhzpmi` and dev
-`sssichkbdqariguvqprc` — with the **same version** in both. `apply_migration` stamps a fresh
-timestamp on every call, so calling it once per project records two different versions (that
-happened with `add_planned_r_generated_column` and `add_trade_tags`, aligned by hand on
-2026-09-14). The method:
-
-1. Apply to **production** with `apply_migration` — that call records the version.
-2. Read it back: `select version from supabase_migrations.schema_migrations where name = '<name>'`.
-3. On **dev**, run the same SQL with `execute_sql`, then record production's version:
-   `insert into supabase_migrations.schema_migrations (version, name) values ('<version>', '<name>')`.
-   Never call `apply_migration` on dev.
+The 49 files up to `20261011065622_add_broker_connection_token_expiry_tracking.sql` were
+exported byte-for-byte from production's `supabase_migrations.schema_migrations.statements`
+(md5-verified) when the integration was set up on 2026-10-11. Both projects already had all of
+them recorded, so connecting the integration applied nothing.
 
 ### Destructive changes wait for the code
 
-Production runs `main`, and a migration hits production the moment it is applied — long before
-the code that goes with it is merged. So a migration that removes or narrows anything the code
-touches (`DROP COLUMN`, `DROP TABLE`, a rename, a new `NOT NULL`, a tighter `CHECK`) ships in
-two steps:
+A migration reaches production the moment `main` is pushed, while Vercel is still building —
+the old code keeps serving for that window, and longer if the deploy fails. So a migration that
+removes or narrows anything the code touches (`DROP COLUMN`, `DROP TABLE`, a rename, a new
+`NOT NULL`, a tighter `CHECK`) ships in two releases:
 
-1. **Code first.** Deploy to `main` the code that no longer reads or writes the old shape.
-   Additive migrations (a new nullable column, a new table, an index) may go in before that code.
-2. **Then contract.** Only once that code is live in production, apply the destructive migration.
+1. **Code first.** Merge to `main` the code that no longer reads or writes the old shape.
+   Additive migrations (a new nullable column, a new table, an index) may ride along with it.
+2. **Then contract.** Only once that code is live in production, merge the destructive
+   migration to `main` in a later release.
 
-Before any destructive migration, confirm production code no longer uses the name:
-`git grep -n "<name>" origin/main -- lib app components` must come back empty.
+Before merging a destructive migration to `main`, confirm production code no longer uses the
+name: `git grep -n "<name>" origin/main -- lib app components` must come back empty.
 
 `add_planned_r_generated_column` broke this on 2026-09-14: it dropped `Trade.rMultipleEntry`
 from production while `main` still wrote `rMultipleEntry: null` in `buildTradeInsert`
@@ -57,7 +76,10 @@ from production while `main` still wrote `rMultipleEntry: null` in `buildTradeIn
 
 After **any** schema change, regenerate the `Database` types:
 
-1. Call the Supabase MCP `generate_typescript_types` tool for project id `nwvswntqrqqtwzrhzpmi`.
+1. Once the push to `dev` has applied the migration, call the Supabase MCP
+   `generate_typescript_types` tool for the **dev** project id `sssichkbdqariguvqprc` —
+   production doesn't have the change until `main` is merged, and the code on `dev` needs the
+   new types first. Both projects replay the same files, so the output is identical.
 2. Write the output to [lib/db/types.ts](../../../lib/db/types.ts), replacing the file.
 
 Do **not** hand-edit `lib/db/types.ts` — it is fully generated and any manual change will be
