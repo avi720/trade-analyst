@@ -18,8 +18,11 @@ DECLARE
   auth_email text;
 BEGIN
   SELECT u.email INTO auth_email FROM auth.users u WHERE u.id = NEW.id;
+  -- No auth user: leave the row alone and let RLS / User_id_fkey reject it. Raising here
+  -- would run before the RLS check and tell a caller whether an arbitrary id is a
+  -- registered user (this error for unknown ids, 42501 for someone else's).
   IF auth_email IS NULL THEN
-    RAISE EXCEPTION 'User % has no email in auth.users', NEW.id;
+    RETURN NEW;
   END IF;
   NEW.email := auth_email;
   RETURN NEW;

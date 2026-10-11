@@ -11,7 +11,9 @@
  *
  * The BEFORE INSERT trigger copies auth.users.email over whatever the client
  * sends. This signs in with a real JWT and checks both insert shapes the app
- * uses: the dashboard layout's insert+select and /api/profile's upsert.
+ * uses: the dashboard layout's insert+select and /api/profile's upsert. It also
+ * checks that an id with no auth user gets the plain RLS error, so the trigger
+ * cannot be used to probe which ids are registered.
  *
  * Runs against the real Supabase DB — cleans up after itself.
  */
@@ -30,6 +32,8 @@ const TEST_USER_ID = 'a0000000-0000-0000-0000-000000000005'
 const TEST_EMAIL = 'user-email-spoof-test@example.com'
 const TEST_PASSWORD = 'user-email-spoof-test-pw-' + TEST_USER_ID
 const SPOOFED_EMAIL = 'user-email-spoof-victim@example.com'
+// Not a test-suite id and never created in auth.users.
+const UNKNOWN_USER_ID = 'a0000000-0000-0000-0000-0000000000ff'
 
 describe.skipIf(!DB_AVAILABLE)('User.email comes from auth.users, not the client', () => {
   const admin = DB_AVAILABLE ? createAdminClient() : null!
@@ -95,7 +99,10 @@ describe.skipIf(!DB_AVAILABLE)('User.email comes from auth.users, not the client
     expect(count).toBe(0)
   })
 
-  it('profile-style upsert (ignoreDuplicates) cannot change the email of an existing row', async () => {
+  it('profile-style upsert (ignoreDuplicates) with a spoofed email stores the auth email', async () => {
+    // Start without a row: on an existing one ON CONFLICT DO NOTHING never writes, so the
+    // assertion would pass with or without the trigger.
+    await admin.from('User').delete().eq('id', TEST_USER_ID)
     const client = await signInAsTestUser()
 
     const { error } = await client
@@ -104,5 +111,17 @@ describe.skipIf(!DB_AVAILABLE)('User.email comes from auth.users, not the client
 
     expect(error).toBeNull()
     expect(await storedEmail()).toBe(TEST_EMAIL)
+  })
+
+  it('insert for an id with no auth user fails the same way as for any other user', async () => {
+    const client = await signInAsTestUser()
+
+    const { error } = await client
+      .from('User')
+      .insert({ id: UNKNOWN_USER_ID, email: SPOOFED_EMAIL, settings: {} })
+
+    // The trigger runs before RLS; it must not raise its own error and reveal that the id
+    // is not a registered user.
+    expect(error?.code).toBe('42501')
   })
 })
