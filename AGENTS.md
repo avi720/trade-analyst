@@ -94,8 +94,12 @@ Two layout facts that break silently if you get them wrong:
 - **Nav tabs**: "תחקור" (`/research`) · "חיפוש" (`/search`) · "ייבוא-ידני" (`/manual-import`).
 - **Profile/Settings**: unified at `/profile` with sidebar tabs — חשבון / אבטחה / תצוגה / ברוקר.
   `/settings` redirects to `/profile?tab=broker`.
-- **IBKR**: Flex Web Service, 2-step pull (request → download). Token valid ~1 year, encrypted
-  AES-256-GCM at rest. Only the **Activity** Flex Query is used.
+- **IBKR**: users connect through the **IBRIT Web Service** (feed `tradeanalyst-ws`,
+  `lib/ibkr/ibrit-*`): one GET per date range, rate-limited per token. The token is valid 1 year,
+  encrypted AES-256-GCM at rest; expiry reminders count from `BrokerConnection.tokenConnectedAt`
+  and a rejected token sets `lastSyncStatus='TOKEN_INVALID'`. The older **Flex** Web Service
+  path (2-step pull, Activity query only) still syncs existing Flex connections and is slated
+  for removal.
 - **Massive (formerly Polygon)**: `lib/massive`, `app/api/massive`, `MASSIVE_API_KEY`.
   **Price sync is currently disabled** — no workflow, sync dot removed from
   `components/sync-indicator.tsx`, settings panel hidden. Code paths still exist for re-enabling.

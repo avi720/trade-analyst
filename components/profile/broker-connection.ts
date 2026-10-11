@@ -7,6 +7,7 @@ export interface ConnectionStatus {
   lastSyncAt?: string | null;
   lastSyncStatus?: string | null;
   lastSyncError?: string | null;
+  tokenConnectedAt?: string | null;
 }
 
 export function formatRelativeTime(iso: string | null | undefined): string {

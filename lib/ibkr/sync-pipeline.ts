@@ -23,7 +23,9 @@ export interface ConnectionRow {
 export interface ConnectionResult {
   connectionId: string
   userId: string
-  status: 'SUCCESS' | 'ERROR' | 'TRANSIENT_ERROR'
+  // TOKEN_INVALID: IBKR rejected the stored IBRIT token (expired or revoked);
+  // only the user can fix it, by renewing it.
+  status: 'SUCCESS' | 'ERROR' | 'TRANSIENT_ERROR' | 'TOKEN_INVALID'
   error: string | null
   executions: number
   failedExecutions: number

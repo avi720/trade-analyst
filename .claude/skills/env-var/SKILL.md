@@ -53,6 +53,9 @@ produces cryptic runtime failures on fresh clones.
 | `LEMONSQUEEZY_DISCOUNT_CODE_LAUNCH_ANNUAL` | LS discount **code** for launch promo annual ($79.99). Optional — omit after promo ends |
 | `AI_IMPORT_DISPATCH_TOKEN` | **Optional.** Fine-grained GitHub PAT (repo access, dispatch) so the AI-Excel-import upload route can `repository_dispatch` the worker for near-instant processing. Server-only. Omit → the schedule in `ai-import-worker.yml` handles jobs instead. |
 | `AI_IMPORT_DISPATCH_REPO` | **Optional.** `owner/repo` target for the dispatch above. Server-only. Omit with the token to rely on the schedule. |
+| `ZOHO_SMTP_USER` | Zoho Mail mailbox that sends app email (`support@tradeanalyst.app`); also the From address, since Zoho rejects any other. Server-only. Used by `lib/email/send.ts` for IBRIT token expiry reminders. |
+| `ZOHO_SMTP_PASSWORD` | Zoho **app-specific** password for that mailbox. Server-only. Missing or wrong → the IBKR sync cron fails on every run (it verifies the login), by design. |
+| `ZOHO_SMTP_HOST` | **Optional.** SMTP host; defaults to `smtp.zoho.com` (free-plan org mailboxes). Paid plans use `smtppro.zoho.com`, EU data center `*.zoho.eu`. |
 | `GEO_GATE_ENABLED` | **Optional. Intended state: `false`/unset** — see [docs/decisions/geo-gate.md](../../../docs/decisions/geo-gate.md). `'true'` enforces the geo gate. Anything else = allow all. Server-only. |
 | `GEO_ALLOWED_COUNTRIES` | **Optional.** Comma-separated ISO-3166-1 alpha-2 allow-list for the geo gate. Defaults to `IL`. Server-only. |
 | `GEO_BYPASS_SECRET` | **Optional.** Secret for the `?geo_bypass=<secret>` escape hatch (sets a 90-day cookie exempting that browser). Unset = escape hatch disabled. Server-only. |

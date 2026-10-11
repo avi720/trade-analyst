@@ -3,7 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { encryptToken } from "@/lib/ibkr/encrypt";
+import { decryptToken, encryptToken } from "@/lib/ibkr/encrypt";
 import { IbkrTransientError } from "@/lib/ibkr/flex-client";
 import {
   addDaysToReportDate,
@@ -12,6 +12,7 @@ import {
   IbritCredentialsError,
 } from "@/lib/ibkr/ibrit-client";
 import { IBRIT_BROKER_NAME } from "@/lib/ibkr/broker-names";
+import { IBRIT_TOKEN_INVALID_STATUS } from "@/lib/ibkr/ibrit-token";
 import { syncOneConnection } from "@/lib/ibkr/sync-pipeline";
 import { getUserTier, isProTier, proRequiredResponse } from "@/lib/billing/tier";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/auth/rate-limit";
@@ -20,7 +21,7 @@ import { logAuditEvent } from "@/lib/audit/log";
 export const maxDuration = 300;
 
 // Each connect costs several IBKR requests (check + history backfill) against
-// a 10/minute service-wide limit, so repeated attempts are capped.
+// IBKR's 10/minute limit for the token, so repeated attempts are capped.
 const CONNECT_LIMIT_PER_HOUR = 5;
 
 const schema = z.object({
@@ -81,6 +82,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "לא הצלחנו להתחבר ל-IBKR. נסו שוב מאוחר יותר" }, { status: 502 });
   }
 
+  // The token's 1-year validity (and its expiry reminders) counts from when it
+  // was first connected. Re-saving the same token keeps that date, unless IBKR
+  // had rejected it: then it passed the check above because it was renewed.
+  const { data: existing, error: existingError } = await supabase
+    .from("BrokerConnection")
+    .select("brokerName, flexTokenEncrypted, lastSyncStatus, tokenConnectedAt, tokenExpiryReminderDays")
+    .eq("userId", user.id)
+    .maybeSingle();
+  if (existingError) {
+    console.error("[api/ibkr/ibrit/connect] DB error:", existingError.message);
+    return NextResponse.json({ error: "שמירת החיבור נכשלה" }, { status: 500 });
+  }
+  const sameValidToken =
+    existing?.brokerName === IBRIT_BROKER_NAME &&
+    existing.tokenConnectedAt !== null &&
+    existing.lastSyncStatus !== IBRIT_TOKEN_INVALID_STATUS &&
+    decryptToken(existing.flexTokenEncrypted) === token;
+
   // One connection per user: this replaces a Flex connection if there is one.
   // Execution IDs are the same in both feeds, so already-synced trades aren't duplicated.
   const { data: conn, error } = await supabase
@@ -95,6 +114,8 @@ export async function POST(req: NextRequest) {
         lastSyncAt: null,
         lastSyncStatus: null,
         lastSyncError: null,
+        tokenConnectedAt: sameValidToken ? existing.tokenConnectedAt : new Date().toISOString(),
+        tokenExpiryReminderDays: sameValidToken ? existing.tokenExpiryReminderDays : null,
       },
       { onConflict: "userId" },
     )

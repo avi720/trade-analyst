@@ -11,7 +11,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("BrokerConnection")
     .select(
-      "id, brokerName, flexQueryIdActivity, pricePollingIntervalMin, lastSyncAt, lastSyncStatus, lastSyncError, lastPriceSyncAt, lastPriceSyncStatus, isActive, accountId"
+      "id, brokerName, flexQueryIdActivity, pricePollingIntervalMin, lastSyncAt, lastSyncStatus, lastSyncError, lastPriceSyncAt, lastPriceSyncStatus, isActive, accountId, tokenConnectedAt"
     )
     .eq("userId", user.id)
     .maybeSingle();

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, ExternalLink, Loader2, Mail } from "lucide-react";
 import { formatRelativeTime, type ConnectionStatus } from "./broker-connection";
+import { IBRIT_TOKEN_INVALID_STATUS, ibritTokenExpiresAt } from "@/lib/ibkr/ibrit-token";
 
 // Login entry points, not deep links: the Third-Party Data Feeds page sits
 // behind the Portal login, and a deep link doesn't survive the SSO redirect.
@@ -25,6 +26,8 @@ const PORTAL_PATH = ["Reporting", "Third-Party Reports", "Third-Party Data Feeds
 
 // Set once the final-screen screenshot is added under public/.
 const GUIDE_SCREENSHOT: { src: string; alt: string } | null = null;
+
+const EXPIRY_DATE = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 const inputClass =
   "w-full bg-panel border border-border rounded px-3 py-2 text-sm text-text-main placeholder-text-mute outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber focus-visible:outline-offset-2 focus:border-amber font-mono";
@@ -119,9 +122,29 @@ function SyncStatus({ connection, syncing }: { connection: ConnectionStatus; syn
   if (!connection.lastSyncAt) {
     return <p className="text-text-dim">הסנכרון הראשון עוד לא הסתיים</p>;
   }
-  const failed = connection.lastSyncStatus === "ERROR";
+  const tokenInvalid = connection.lastSyncStatus === IBRIT_TOKEN_INVALID_STATUS;
+  const failed = connection.lastSyncStatus === "ERROR" || tokenInvalid;
+  const expiresAt = connection.tokenConnectedAt ? ibritTokenExpiresAt(new Date(connection.tokenConnectedAt)) : null;
   return (
     <div className="space-y-1">
+      {tokenInvalid ? (
+        <div role="alert" className="mb-3 space-y-1">
+          <p className="text-red font-medium">IBKR דחו את ה-Token, כנראה כי עברה שנה מאז שהונפק. טריידים חדשים לא מסתנכרנים.</p>
+          <p className="text-text-dim">
+            חדשו את ה-Token ב-Portal של IBKR, באותו מקום שבו מצאתם אותו (שלב 3 במדריך). אם קיבלתם Token חדש,
+            הדביקו אותו כאן ולחצו &quot;עדכון&quot;.
+          </p>
+        </div>
+      ) : (
+        expiresAt && (
+          <div className="flex justify-between">
+            <span className="text-text-dim">תוקף ה-Token</span>
+            <span className="text-text-main">
+              עד <span className="font-mono">{EXPIRY_DATE.format(expiresAt)}</span>
+            </span>
+          </div>
+        )
+      )}
       <div className="flex justify-between">
         <span className="text-text-dim">סנכרון אחרון</span>
         <span className={failed ? "text-red" : "text-text-main"}>
@@ -129,7 +152,7 @@ function SyncStatus({ connection, syncing }: { connection: ConnectionStatus; syn
           {failed ? " · נכשל" : ""}
         </span>
       </div>
-      {failed && connection.lastSyncError && (
+      {connection.lastSyncStatus === "ERROR" && connection.lastSyncError && (
         <p dir="ltr" className="text-red text-xs font-mono break-words">
           {connection.lastSyncError}
         </p>
@@ -142,7 +165,8 @@ export function IbritConnect({ connection, syncing, onConnected }: IbritConnectP
   // null until the user toggles it: open for a new user, closed once connected.
   // The connection loads after mount, so this can't be a one-time initial value.
   const [guideToggled, setGuideToggled] = useState<boolean | null>(null);
-  const guideOpen = guideToggled ?? !connection;
+  // Also open when the token was rejected: renewing it starts from step 3.
+  const guideOpen = guideToggled ?? (!connection || connection.lastSyncStatus === IBRIT_TOKEN_INVALID_STATUS);
   const [token, setToken] = useState("");
   const [queryId, setQueryId] = useState("");
   const [saving, setSaving] = useState(false);

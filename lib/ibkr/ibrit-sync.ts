@@ -5,8 +5,10 @@ import {
   addDaysToReportDate,
   easternReportDate,
   fetchIbritRange,
+  IbritCredentialsError,
   IBRIT_MAX_RANGE_DAYS,
 } from "@/lib/ibkr/ibrit-client";
+import { IBRIT_TOKEN_INVALID_STATUS, ibritTokenExpiresAt } from "@/lib/ibkr/ibrit-token";
 import { parseIbritActivityCsv, type IbritCorrection } from "@/lib/ibkr/parse-ibrit-csv";
 import { processExecutions } from "@/lib/ibkr/process-executions";
 import { redactUserId } from "@/lib/log/redact";
@@ -81,6 +83,33 @@ export async function fetchIbritFiles(token: string, queryId: string, since: Dat
   return { files: chunks.flat(), from, to, truncated };
 }
 
+// IBKR accepted the token. If it had rejected it before, or its year here is
+// already up, the client renewed it in the Portal and it kept its value, so its
+// year restarts: from now after a rejection, else from where the old year ended.
+// Matching the stored ciphertext (random IV) skips a token replaced meanwhile.
+async function restartRenewedTokenYear(admin: Admin, conn: ConnectionRow): Promise<void> {
+  const { data, error } = await admin
+    .from("BrokerConnection")
+    .select("lastSyncStatus, tokenConnectedAt")
+    .eq("id", conn.id)
+    .eq("flexTokenEncrypted", conn.flexTokenEncrypted)
+    .maybeSingle();
+  if (error) throw new Error(`Failed to read IBRIT token state: ${error.message}`);
+  if (!data?.tokenConnectedAt) return;
+
+  const now = new Date();
+  const oldExpiry = ibritTokenExpiresAt(new Date(data.tokenConnectedAt));
+  const rejectedBefore = data.lastSyncStatus === IBRIT_TOKEN_INVALID_STATUS;
+  if (!rejectedBefore && oldExpiry > now) return;
+
+  const { error: updateError } = await admin
+    .from("BrokerConnection")
+    .update({ tokenConnectedAt: (rejectedBefore ? now : oldExpiry).toISOString(), tokenExpiryReminderDays: null })
+    .eq("id", conn.id)
+    .eq("tokenConnectedAt", data.tokenConnectedAt);
+  if (updateError) throw new Error(`Failed to restart IBRIT token year: ${updateError.message}`);
+}
+
 function describeCorrections(corrections: IbritCorrection[]): string {
   const first = corrections[0];
   return (
@@ -104,6 +133,8 @@ export async function syncIbritConnection(admin: Admin, conn: ConnectionRow): Pr
     if (truncated) {
       console.warn(`[ibrit-sync] user=${redactUserId(conn.userId)} history before ${from} not loaded (backfill cap)`);
     }
+
+    await restartRenewedTokenYear(admin, conn);
 
     const { data: event } = await admin
       .from("BrokerEvent")
@@ -172,6 +203,30 @@ export async function syncIbritConnection(admin: Admin, conn: ConnectionRow): Pr
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[ibrit-sync] user=${redactUserId(conn.userId)} error:`, errMsg);
+
+    // Usually the token passed its 1-year validity. The broker tab tells the
+    // user to renew it. Later syncs keep trying it, since a token renewed in
+    // the Portal may keep its value.
+    if (err instanceof IbritCredentialsError) {
+      await admin
+        .from("BrokerConnection")
+        .update({
+          lastSyncAt: new Date().toISOString(),
+          lastSyncStatus: IBRIT_TOKEN_INVALID_STATUS,
+          lastSyncError: errMsg,
+        })
+        .eq("id", conn.id)
+        // Not over a token the user pasted while this sync was running.
+        .eq("flexTokenEncrypted", conn.flexTokenEncrypted);
+      return {
+        connectionId: conn.id,
+        userId: conn.userId,
+        status: "TOKEN_INVALID",
+        error: errMsg,
+        executions: executionCount,
+        failedExecutions,
+      };
+    }
 
     // Same contract as Flex: a transient error leaves lastSyncAt untouched so
     // the next cron run retries.
