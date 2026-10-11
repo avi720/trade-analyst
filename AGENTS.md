@@ -29,9 +29,12 @@ dropped in cleanup (`tax`, `tradeDate`, `exchange`, `proceeds`, `brokerTradeId`,
 must not be re-added** — the audit trail lives on `BrokerEvent.rawPayload`; and **`SITE_URL`
 must be the non-redirecting origin**, or every cron silently no-ops while Actions stays green.
 
-The `db-schema` row is additionally enforced, not just requested: a `PreToolUse` /
-`PostToolUse` hook pair in [.claude/settings.json](.claude/settings.json) fires on any MCP
-`apply_migration` call and injects the checklist plus the regenerate-types reminder
+**Migrations are files in [supabase/migrations/](supabase/migrations/), applied by the Supabase
+GitHub integration** — push to `dev` applies them to the dev project, merge to `main` to
+production. The `db-schema` row is additionally enforced, not just requested: `PreToolUse` hooks
+in [.claude/settings.json](.claude/settings.json) **deny** any MCP `apply_migration` call (a
+version applied outside git breaks the integration's next deploy) and inject the checklist when
+a file under `supabase/migrations/` is written
 ([.claude/hooks/db-migration-notice.sh](.claude/hooks/db-migration-notice.sh)). It emits JSON
 via `node`, not `jq` — `jq` is not installed on this machine.
 

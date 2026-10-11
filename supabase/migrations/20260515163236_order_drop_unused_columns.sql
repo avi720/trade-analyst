@@ -1,0 +1,6 @@
+ALTER TABLE "Order"
+  DROP COLUMN IF EXISTS "tax",
+  DROP COLUMN IF EXISTS "tradeDate",
+  DROP COLUMN IF EXISTS "exchange",
+  DROP COLUMN IF EXISTS "proceeds",
+  DROP COLUMN IF EXISTS "brokerTradeId";

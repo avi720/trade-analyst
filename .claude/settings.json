@@ -7,22 +7,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/db-migration-notice.sh\" pre",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/db-migration-notice.sh\" block-apply",
             "timeout": 10,
-            "statusMessage": "Loading db-schema checklist"
+            "statusMessage": "Blocking apply_migration"
           }
         ]
-      }
-    ],
-    "PostToolUse": [
+      },
       {
-        "matcher": "mcp__.*__apply_migration",
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/db-migration-notice.sh\" post",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/db-migration-notice.sh\" checklist",
             "timeout": 10,
-            "statusMessage": "Checking generated types"
+            "statusMessage": "Checking for migration files"
           }
         ]
       }

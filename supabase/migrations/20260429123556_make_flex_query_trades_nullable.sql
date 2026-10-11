@@ -1,0 +1,1 @@
+ALTER TABLE "BrokerConnection" ALTER COLUMN "flexQueryIdTrades" DROP NOT NULL;

@@ -1,0 +1,2 @@
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "broker" TEXT;
+UPDATE "Order" SET broker = 'IBKR' WHERE broker IS NULL AND "brokerExecId" NOT LIKE 'MANUAL-%';

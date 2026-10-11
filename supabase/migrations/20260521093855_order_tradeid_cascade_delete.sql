@@ -1,0 +1,3 @@
+ALTER TABLE "Order" DROP CONSTRAINT "Order_tradeId_fkey";
+ALTER TABLE "Order" ADD CONSTRAINT "Order_tradeId_fkey"
+  FOREIGN KEY ("tradeId") REFERENCES "Trade"(id) ON UPDATE CASCADE ON DELETE CASCADE;
