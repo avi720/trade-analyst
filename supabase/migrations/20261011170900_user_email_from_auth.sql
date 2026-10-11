@@ -17,13 +17,14 @@ AS $$
 DECLARE
   auth_email text;
 BEGIN
+  -- Assign unconditionally, even NULL. ExecInsert runs BEFORE triggers, then RLS WITH CHECK,
+  -- then NOT NULL, so:
+  --   * someone else's id, registered or not, fails RLS with 42501 — no way to probe ids;
+  --   * your own id with no email in auth.users (phone / anonymous sign-in) fails NOT NULL
+  --     with 23502 instead of keeping the address the client sent.
+  -- Do not raise or return early when auth_email is NULL: raising runs before RLS and
+  -- answers differently for unregistered ids, and returning early keeps the client value.
   SELECT u.email INTO auth_email FROM auth.users u WHERE u.id = NEW.id;
-  -- No auth user: leave the row alone and let RLS / User_id_fkey reject it. Raising here
-  -- would run before the RLS check and tell a caller whether an arbitrary id is a
-  -- registered user (this error for unknown ids, 42501 for someone else's).
-  IF auth_email IS NULL THEN
-    RETURN NEW;
-  END IF;
   NEW.email := auth_email;
   RETURN NEW;
 END;

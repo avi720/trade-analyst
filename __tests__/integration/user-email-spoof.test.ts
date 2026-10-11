@@ -13,7 +13,8 @@
  * sends. This signs in with a real JWT and checks both insert shapes the app
  * uses: the dashboard layout's insert+select and /api/profile's upsert. It also
  * checks that an id with no auth user gets the plain RLS error, so the trigger
- * cannot be used to probe which ids are registered.
+ * cannot be used to probe which ids are registered, and that an auth user with
+ * no email (phone sign-in) cannot keep the address the client sent.
  *
  * Runs against the real Supabase DB — cleans up after itself.
  */
@@ -32,6 +33,12 @@ const TEST_USER_ID = 'a0000000-0000-0000-0000-000000000005'
 const TEST_EMAIL = 'user-email-spoof-test@example.com'
 const TEST_PASSWORD = 'user-email-spoof-test-pw-' + TEST_USER_ID
 const SPOOFED_EMAIL = 'user-email-spoof-victim@example.com'
+// An auth user with a phone and no email, as a phone or anonymous sign-in would create.
+const PHONE_USER_ID = 'a0000000-0000-0000-0000-000000000006'
+const PHONE_USER_PHONE = '15550100006'
+// Distinct from SPOOFED_EMAIL so a missing trigger shows up as a successful insert,
+// not as a User_email_key collision with a row an earlier test left behind.
+const PHONE_USER_SPOOFED_EMAIL = 'user-email-spoof-phone-victim@example.com'
 // Not a test-suite id and never created in auth.users.
 const UNKNOWN_USER_ID = 'a0000000-0000-0000-0000-0000000000ff'
 
@@ -39,8 +46,9 @@ describe.skipIf(!DB_AVAILABLE)('User.email comes from auth.users, not the client
   const admin = DB_AVAILABLE ? createAdminClient() : null!
 
   async function cleanup() {
-    await admin.from('User').delete().eq('id', TEST_USER_ID)
+    await admin.from('User').delete().in('id', [TEST_USER_ID, PHONE_USER_ID])
     await admin.auth.admin.deleteUser(TEST_USER_ID).catch(() => {})
+    await admin.auth.admin.deleteUser(PHONE_USER_ID).catch(() => {})
   }
 
   async function signInAsTestUser() {
@@ -72,6 +80,14 @@ describe.skipIf(!DB_AVAILABLE)('User.email comes from auth.users, not the client
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- admin API accepts id, types lag
     } as any)
     if (error) throw error
+
+    const { error: phoneErr } = await admin.auth.admin.createUser({
+      id: PHONE_USER_ID,
+      phone: PHONE_USER_PHONE,
+      phone_confirm: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- admin API accepts id, types lag
+    } as any)
+    if (phoneErr) throw phoneErr
   })
 
   afterAll(async () => {
@@ -123,5 +139,15 @@ describe.skipIf(!DB_AVAILABLE)('User.email comes from auth.users, not the client
     // The trigger runs before RLS; it must not raise its own error and reveal that the id
     // is not a registered user.
     expect(error?.code).toBe('42501')
+  })
+
+  it('insert for an auth user with no email fails instead of keeping the client address', async () => {
+    // Service role, because signing in by phone needs the phone provider. For the user's own
+    // JWT RLS would pass too, so NOT NULL is what blocks it either way.
+    const { error } = await admin
+      .from('User')
+      .insert({ id: PHONE_USER_ID, email: PHONE_USER_SPOOFED_EMAIL, settings: {} })
+
+    expect(error?.code).toBe('23502')
   })
 })
