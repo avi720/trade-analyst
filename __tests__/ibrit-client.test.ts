@@ -96,7 +96,7 @@ describe("fetchIbritRange", () => {
     await expect(fetchIbritRange("t", "q", "20260101", "20260101")).rejects.toThrow(/HTTP error 503/);
   });
 
-  describe("throttle (IBKR: 1 per second, 10 per minute)", () => {
+  describe("throttle (IBKR: 1 per second, 10 per minute, per token + query ID)", () => {
     async function setup() {
       vi.useFakeTimers();
       const client = await loadClient();
@@ -104,10 +104,30 @@ describe("fetchIbritRange", () => {
         async () => new Response('{"msg":"none","rc":1010}', { headers: { "content-type": "application/json" } }),
       );
       vi.stubGlobal("fetch", fetchMock);
-      const fire = (n: number) =>
-        Array.from({ length: n }, (_, i) => client.fetchIbritRange("t", "q", "20260101", `2026010${(i % 9) + 1}`));
-      return { fetchMock, fire };
+      const fire = (n: number, token = "t", queryId = "q") =>
+        Array.from({ length: n }, (_, i) => client.fetchIbritRange(token, queryId, "20260101", `2026010${(i % 9) + 1}`));
+      const tokensSent = () => fetchMock.mock.calls.map(([url]) => new URL(url).searchParams.get("t"));
+      return { fetchMock, fire, tokensSent };
     }
+
+    it("doesn't hold one client's requests behind another's", async () => {
+      const { fetchMock, fire, tokensSent } = await setup();
+      const pending = [...fire(11, "tokA"), ...fire(1, "tokB"), ...fire(1, "tokC")];
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(tokensSent()).toEqual(["tokA", "tokB", "tokC"]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchMock).toHaveBeenCalledTimes(13);
+      await Promise.all(pending);
+    });
+
+    it("keys the limit on the query ID too", async () => {
+      const { fetchMock, fire } = await setup();
+      const pending = [...fire(1, "tok", "q1"), ...fire(1, "tok", "q2")];
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await Promise.all(pending);
+    });
     afterEach(() => vi.useRealTimers());
 
     it("starts concurrent requests 1.1 seconds apart", async () => {

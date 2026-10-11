@@ -10,13 +10,15 @@ const IBRIT_SERVICE_CODE = "tradeanalyst-ws";
 // Observed on the live service: a wider fd/td range is rejected with rc 1059.
 export const IBRIT_MAX_RANGE_DAYS = 365;
 
-// IBKR's documented limit is 1 fetch per second and 10 per minute (rc 1018).
-// Requests may overlap: a range takes ~10s to answer, so starts are what's limited.
+// IBKR's documented limit is 1 fetch per second and 10 per minute (rc 1018),
+// per client (token + query ID), not per service code (IBKR, 2026-10-09).
+// Starts are what's limited: a range takes ~10s to answer.
 const MIN_REQUEST_GAP_MS = 1_100;
 const RATE_WINDOW_MS = 60_000;
 export const IBRIT_MAX_REQUESTS_PER_MINUTE = 10;
 
-// rc 1052: the user pasted a wrong token or query ID. Not retryable.
+// rc 1052: a wrong token or query ID, or a token past its 1-year validity.
+// Not retryable with the same values.
 export class IbritCredentialsError extends Error {
   constructor(message: string) {
     super(message);
@@ -34,14 +36,20 @@ const TRANSIENT_CODES = new Set([
 const NO_DATA_CODES = new Set([1010, 1600]);
 const BAD_CREDENTIALS_CODE = 1052;
 
-// Start times claimed by this process, ascending; may include future slots.
-const claimedStarts: number[] = [];
+// Start times claimed by this process per client, ascending; may include future slots.
+const claimedStartsByClient = new Map<string, number[]>();
 
-// Throttles every IBRIT request made by this process. The slot is claimed
-// synchronously, so concurrent callers queue instead of racing.
-async function waitForRequestSlot(): Promise<void> {
+// Throttles this process's IBRIT requests per client, so different users'
+// syncs run in parallel. The slot is claimed synchronously, so concurrent
+// callers for one client queue instead of racing.
+async function waitForRequestSlot(clientKey: string): Promise<void> {
   const now = Date.now();
-  while (claimedStarts.length > 0 && claimedStarts[0] <= now - RATE_WINDOW_MS) claimedStarts.shift();
+  for (const [key, starts] of claimedStartsByClient) {
+    while (starts.length > 0 && starts[0] <= now - RATE_WINDOW_MS) starts.shift();
+    if (starts.length === 0) claimedStartsByClient.delete(key);
+  }
+  const claimedStarts = claimedStartsByClient.get(clientKey) ?? [];
+  claimedStartsByClient.set(clientKey, claimedStarts);
 
   let slot = now;
   const last = claimedStarts.at(-1);
@@ -89,7 +97,7 @@ export async function fetchIbritRange(
 ): Promise<string[]> {
   const params = new URLSearchParams({ t: token, q: queryId, s: IBRIT_SERVICE_CODE, fd: from, td: to });
 
-  await waitForRequestSlot();
+  await waitForRequestSlot(`${token}\n${queryId}`);
   console.log(`[ibrit] fetch fd=${from} td=${to}`);
   const res = await fetch(`${IBRIT_URL}?${params}`, { headers: { "User-Agent": "Java" } });
   if (!res.ok) throw new Error(`IBRIT HTTP error ${res.status}`);
