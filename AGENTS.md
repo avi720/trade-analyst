@@ -29,14 +29,13 @@ dropped in cleanup (`tax`, `tradeDate`, `exchange`, `proceeds`, `brokerTradeId`,
 must not be re-added** — the audit trail lives on `BrokerEvent.rawPayload`; and **`SITE_URL`
 must be the non-redirecting origin**, or every cron silently no-ops while Actions stays green.
 
-**Migrations are files in [supabase/migrations/](supabase/migrations/), applied by the Supabase
-GitHub integration** — push to `dev` applies them to the dev project, merge to `main` to
-production. The `db-schema` row is additionally enforced, not just requested: `PreToolUse` hooks
-in [.claude/settings.json](.claude/settings.json) **deny** any MCP `apply_migration` call (a
-version applied outside git breaks the integration's next deploy) and inject the checklist when
-a file under `supabase/migrations/` is written
-([.claude/hooks/db-migration-notice.sh](.claude/hooks/db-migration-notice.sh)). It emits JSON
-via `node`, not `jq` — `jq` is not installed on this machine.
+**Migrations are files in [supabase/migrations/](supabase/migrations/)**, applied by the
+Supabase GitHub integration (push `dev` → dev project, merge `main` → production) — never MCP
+`apply_migration`, never DDL through `execute_sql`. Enforced by `PreToolUse` hooks in
+[.claude/settings.json](.claude/settings.json): `apply_migration` is denied, and writing a
+migration file injects the `db-schema` checklist
+([.claude/hooks/db-migration-notice.sh](.claude/hooks/db-migration-notice.sh) — JSON via
+`node`, since `jq` is not installed on this machine).
 
 **Nested AGENTS.md** — load on their own when files in that directory are read. Only
 directories with knowledge the code doesn't make obvious get one:
@@ -49,6 +48,7 @@ directories with knowledge the code doesn't make obvious get one:
 | [lib/billing/](lib/billing/AGENTS.md) | Which subscription states grant Pro, single sources for prices and limits |
 | [lib/utils/](lib/utils/AGENTS.md) | Research metrics: the single-walk aggregator must match the reference helpers |
 | [\_\_tests\_\_/](__tests__/AGENTS.md) | Integration suites hit a real Supabase project; mocking conventions |
+| [supabase/](supabase/AGENTS.md) | What a push deploys, removing a dev-only migration, what in `config.toml` reaches production |
 
 **Decisions** — [docs/decisions/](docs/decisions/) records things that are deliberately not
 built or deliberately off, so they don't get "fixed":

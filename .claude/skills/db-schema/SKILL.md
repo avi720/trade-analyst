@@ -37,8 +37,10 @@ The method:
 database exists there but not in `supabase/migrations/`, and the integration's next deploy
 fails on "remote migration versions not found in local migrations directory".
 
-**Never edit a migration that has already been pushed.** The integration only applies new
-versions, so an edited file silently diverges from both databases. Fix forward with a new file.
+**Never edit or delete a migration that has already been pushed.** The integration only applies
+new versions, so an edited file silently diverges from both databases; fix forward with a new
+file. Removing one that ran only on dev has a specific order — see
+[supabase/AGENTS.md](../../../supabase/AGENTS.md).
 
 Each migration should be idempotent-safe where practical (use `IF NOT EXISTS` / `IF EXISTS`
 for objects that may already have been created out-of-band).
@@ -46,11 +48,6 @@ for objects that may already have been created out-of-band).
 Never change the schema by hand in the dashboard or via `execute_sql`. Replaying
 `supabase/migrations/` onto an empty project must reproduce production exactly; three hand-made
 changes broke that and had to be codified after the fact in `codify_out_of_band_prod_drift`.
-
-The 49 files up to `20261011065622_add_broker_connection_token_expiry_tracking.sql` were
-exported byte-for-byte from production's `supabase_migrations.schema_migrations.statements`
-(md5-verified) when the integration was set up on 2026-10-11. Both projects already had all of
-them recorded, so connecting the integration applied nothing.
 
 ### Destructive changes wait for the code
 
