@@ -125,6 +125,8 @@ export type Database = {
           lastSyncError: string | null
           lastSyncStatus: string | null
           pricePollingIntervalMin: number
+          tokenConnectedAt: string | null
+          tokenExpiryReminderDays: number | null
           userId: string
         }
         Insert: {
@@ -140,6 +142,8 @@ export type Database = {
           lastSyncError?: string | null
           lastSyncStatus?: string | null
           pricePollingIntervalMin?: number
+          tokenConnectedAt?: string | null
+          tokenExpiryReminderDays?: number | null
           userId: string
         }
         Update: {
@@ -155,6 +159,8 @@ export type Database = {
           lastSyncError?: string | null
           lastSyncStatus?: string | null
           pricePollingIntervalMin?: number
+          tokenConnectedAt?: string | null
+          tokenExpiryReminderDays?: number | null
           userId?: string
         }
         Relationships: [

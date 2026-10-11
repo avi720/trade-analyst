@@ -44,7 +44,7 @@ function formatRelative(iso: string | null): string {
 function statusBadgeClass(status: string | null): string {
   if (!status) return 'bg-panel-3 text-text-dim'
   if (status === 'SUCCESS') return 'bg-green/20 text-green'
-  if (status === 'ERROR') return 'bg-red/20 text-red'
+  if (status === 'ERROR' || status === 'TOKEN_INVALID') return 'bg-red/20 text-red'
   if (status === 'TRANSIENT_ERROR') return 'bg-amber-tint text-amber'
   return 'bg-panel-3 text-text-dim'
 }
@@ -55,6 +55,7 @@ function statusLabel(status: string | null): string {
     SUCCESS: 'הצלחה',
     ERROR: 'שגיאה',
     TRANSIENT_ERROR: 'שגיאה זמנית',
+    TOKEN_INVALID: 'Token לא בתוקף',
     PENDING: 'ממתין',
     SYNCING: 'מסנכרן',
   }
