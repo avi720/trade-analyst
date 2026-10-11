@@ -1,0 +1,1 @@
+ALTER TABLE "BrokerConnection" DROP COLUMN IF EXISTS "pollingIntervalMin";
