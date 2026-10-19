@@ -120,6 +120,19 @@ function SyncStatus({ connection, syncing }: { connection: ConnectionStatus; syn
     );
   }
   if (!connection.lastSyncAt) {
+    // A status with no lastSyncAt: the first sync stopped on a transient IBKR error.
+    if (connection.lastSyncStatus === "ERROR") {
+      return (
+        <div role="alert" className="space-y-1">
+          <p className="text-red">טעינת ההיסטוריה מ-IBKR לא הצליחה הפעם. ננסה שוב אוטומטית בסנכרון הבא, תוך כמה שעות.</p>
+          {connection.lastSyncError && (
+            <p dir="ltr" className="text-text-dim text-xs font-mono break-words">
+              {connection.lastSyncError}
+            </p>
+          )}
+        </div>
+      );
+    }
     return <p className="text-text-dim">הסנכרון הראשון עוד לא הסתיים</p>;
   }
   const tokenInvalid = connection.lastSyncStatus === IBRIT_TOKEN_INVALID_STATUS;
