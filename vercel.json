@@ -1,7 +1,9 @@
 {
   "regions": ["icn1"],
   "functions": {
-    "app/api/cron/ibkr-sync/route.ts": { "maxDuration": 60 },
-    "app/api/ibkr/connect/route.ts": { "maxDuration": 60 }
+    "app/api/cron/ibkr-sync/route.ts": { "maxDuration": 300 },
+    "app/api/ibkr/connect/route.ts": { "maxDuration": 60 },
+    "app/api/ibkr/ibrit/connect/route.ts": { "maxDuration": 300 },
+    "app/api/admin/ibkr/[connectionId]/sync/route.ts": { "maxDuration": 300 }
   }
 }

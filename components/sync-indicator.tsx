@@ -18,6 +18,7 @@ const IBKR_TRANSIENT_CODES = new Set([
   "1018", // Too many requests (rate limit; next run will be fine)
   "1019", // Statement generation in progress
   "1021", // Statement could not be retrieved at this time
+  "1410", // IBRIT: cannot be processed at this time (lib/ibkr/ibrit-client.ts)
 ]);
 
 interface ConnectionStatus {
@@ -43,8 +44,8 @@ function ibkrDotColor(
   if (!lastSyncAt) return "bg-text-mute";
   if (lastSyncStatus === "SUCCESS") return "bg-green";
 
-  // Extract error code from "IBKR Flex (CODE): MESSAGE" format
-  const match = lastSyncError?.match(/IBKR Flex \((\d+)\)/);
+  // Extract error code from "IBKR Flex (CODE): MESSAGE" / "IBRIT (CODE): MESSAGE" format
+  const match = lastSyncError?.match(/(?:IBKR Flex|IBRIT) \((\d+)\)/);
   if (match && IBKR_TRANSIENT_CODES.has(match[1])) return "bg-amber";
 
   return "bg-red";

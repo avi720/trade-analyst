@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { decryptToken } from "@/lib/ibkr/encrypt";
 import { fetchFlexQuery } from "@/lib/ibkr/flex-client";
+import { IBRIT_BROKER_NAME } from "@/lib/ibkr/broker-names";
 
 // Tests the Activity Flex Query connection.
 // Uses the RLS-bound client to read the caller's own BrokerConnection row.
@@ -12,12 +13,15 @@ export async function POST() {
 
   const { data: conn } = await supabase
     .from("BrokerConnection")
-    .select("flexTokenEncrypted, flexQueryIdActivity")
+    .select("brokerName, flexTokenEncrypted, flexQueryIdActivity")
     .eq("userId", user.id)
     .maybeSingle();
 
   if (!conn) {
     return NextResponse.json({ error: "No connection configured" }, { status: 404 });
+  }
+  if (conn.brokerName === IBRIT_BROKER_NAME) {
+    return NextResponse.json({ error: "הבדיקה זמינה רק לחיבור Flex" }, { status: 409 });
   }
 
   let token: string;

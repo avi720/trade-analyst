@@ -31,18 +31,28 @@ function getTzOffsetMs(date: Date, tz: string): number {
 }
 
 /**
- * Converts a local date+time (YYYY-MM-DD / HH:MM) in the given IANA timezone to a UTC ISO string.
+ * Converts wall-clock components in the given IANA timezone to the UTC instant.
  * Two iterations handle DST boundary edge cases.
+ */
+export function wallClockToUtc(
+  y: number, mo: number, d: number, h: number, mi: number, s: number, tz: string,
+): Date {
+  const wallMs = Date.UTC(y, mo - 1, d, h, mi, s)
+  let utcMs = wallMs
+  for (let i = 0; i < 2; i++) {
+    utcMs = wallMs - getTzOffsetMs(new Date(utcMs), tz)
+  }
+  return new Date(utcMs)
+}
+
+/**
+ * Converts a local date+time (YYYY-MM-DD / HH:MM) in the given IANA timezone to a UTC ISO string.
  */
 export function localToUtcIso(dateStr: string, timeStr: string, tz: string): string {
   if (tz === 'UTC') return `${dateStr}T${timeStr}:00.000Z`
   const [y, mo, d] = dateStr.split('-').map(Number)
   const [h, mi] = timeStr.split(':').map(Number)
-  let utcMs = Date.UTC(y, mo - 1, d, h, mi, 0)
-  for (let i = 0; i < 2; i++) {
-    utcMs = Date.UTC(y, mo - 1, d, h, mi, 0) - getTzOffsetMs(new Date(utcMs), tz)
-  }
-  return new Date(utcMs).toISOString()
+  return wallClockToUtc(y, mo, d, h, mi, 0, tz).toISOString()
 }
 
 /**

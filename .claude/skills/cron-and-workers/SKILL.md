@@ -10,9 +10,12 @@ inside Postgres. There are no Vercel Cron entries.
 
 ## Backfill
 
-There is no separate backfill endpoint. `POST /api/ibkr/connect` saves the connection and
-fires the first sync through `waitUntil()` from `@vercel/functions` — this replaced
-`setImmediate`, which Vercel killed as soon as the response was sent.
+There is no separate backfill endpoint. `POST /api/ibkr/ibrit/connect` (IBRIT; the legacy Flex
+one is `POST /api/ibkr/connect`) saves the connection and fires the first sync through
+`waitUntil()` from `@vercel/functions` — this replaced `setImmediate`, which Vercel killed as
+soon as the response was sent. The IBRIT first sync loads up to 10 years of history in
+year-long windows and can take minutes, hence `maxDuration = 300` on that route, the cron
+route and the admin sync route.
 
 ## IBKR sync
 
@@ -29,6 +32,24 @@ The pipeline itself lives in [lib/ibkr/sync-pipeline.ts](../../../lib/ibkr/sync-
 `syncOneConnection(admin, conn)` and `syncActiveConnections(admin)`. The cron route is a thin
 caller and the `/admin/ibkr` manual trigger reuses the same code — keep it that way so the two
 paths can't drift.
+
+All connections sync in parallel. IBRIT requests are throttled per token + query ID (IBKR's
+1/second, 10/minute limit is per client), in-process, in `lib/ibkr/ibrit-client.ts`.
+
+A connection whose IBRIT token IBKR rejects (rc 1052, usually past its 1-year validity) ends as
+`TOKEN_INVALID`. That does **not** fail the run (`ok` stays true): only the user can renew it,
+and the broker tab tells them how. Later runs keep trying it, because a token renewed in the
+Portal may keep its value.
+
+The same route also runs `sendIbritTokenExpiryReminders`
+([lib/ibkr/ibrit-token-reminders.ts](../../../lib/ibkr/ibrit-token-reminders.ts)), alongside
+the sync: an email 7 days and 1 day before the token's year is up, counted from
+`BrokerConnection.tokenConnectedAt`, sent through Zoho SMTP (`ZOHO_SMTP_*`, see the `env-var`
+skill). `tokenExpiryReminderDays` records the last reminder sent and is claimed before sending,
+so overlapping runs can't email twice. The run verifies the SMTP login first, so missing or
+wrong mailbox credentials fail the cron on every run instead of surfacing a year later; a single
+rejected recipient doesn't (it's reported in the response and retried next run). Reminders go
+to the verified Supabase Auth address, never `User.email`, which a user can insert freely.
 
 ## Massive price cron
 

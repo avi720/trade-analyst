@@ -8,7 +8,7 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin'
 import { syncOneConnection } from '@/lib/ibkr/sync-pipeline'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const uuidSchema = z.string().uuid()
 
@@ -38,7 +38,7 @@ export async function POST(
 
   const { data: conn, error: readError } = await admin
     .from('BrokerConnection')
-    .select('id, userId, flexTokenEncrypted, flexQueryIdActivity, isActive')
+    .select('id, userId, brokerName, flexTokenEncrypted, flexQueryIdActivity, isActive')
     .eq('id', connectionId)
     .maybeSingle()
 
@@ -59,6 +59,7 @@ export async function POST(
     syncOneConnection(admin, {
       id: conn.id,
       userId: conn.userId,
+      brokerName: conn.brokerName,
       flexTokenEncrypted: conn.flexTokenEncrypted,
       flexQueryIdActivity: conn.flexQueryIdActivity,
     }).catch(err => {
