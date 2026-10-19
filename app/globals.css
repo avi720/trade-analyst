@@ -198,3 +198,37 @@ input:-webkit-autofill:active {
     scroll-behavior: auto !important;
   }
 }
+
+/* /admin/learn code excerpts — Shiki output (lib/learn/highlight.ts). Grid on
+   <code> drops the newline text nodes between lines, so each .line is one row. */
+.learn-code pre {
+  margin: 0;
+  padding: 0.75rem 0;
+  overflow-x: auto;
+  background: transparent !important;
+  font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.learn-code code {
+  display: grid;
+  min-width: max-content;
+}
+.learn-code .line {
+  display: block;
+  min-height: 1.65em;
+  padding-inline-end: 1.25rem;
+}
+.learn-code .line::before {
+  content: attr(data-line);
+  display: inline-block;
+  width: 3.25rem;
+  padding-inline-end: 1rem;
+  text-align: right;
+  color: #444444;
+  user-select: none;
+}
+.learn-code .line.is-marked {
+  background: rgba(255, 184, 0, 0.08);
+  box-shadow: inset 2px 0 0 var(--amber);
+}

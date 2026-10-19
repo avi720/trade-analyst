@@ -84,3 +84,17 @@ hands the frozen snapshot to `components/admin/admin-health-dashboard.tsx`.
 
 `staleSyncConnections` is not a nice-to-have — it is one of the two guards against the
 `SITE_URL` redirect bug recurring. See the `cron-and-workers` skill.
+
+## Learn — code-tour course
+
+`/admin/learn`, `/admin/learn/[slug]` — a JS / TS / React / Python course taught through this
+repo's own code. Lessons are data in `lib/learn/tracks/*.ts` (model: `lib/learn/types.ts`).
+
+- A `source` block never copies code: it names a file plus a text anchor, and the page reads
+  the excerpt from disk per request (`lib/learn/read-source.ts`) and highlights it with Shiki
+  on the server. On Vercel those files exist in the function only because `next.config.mjs`
+  lists them under `outputFileTracingIncludes` — keep both route keys there.
+- **Refactors can break lessons.** `__tests__/learn-lessons.test.ts` resolves every anchor
+  and note; when it fails after a rename, update the anchor in the track file (that's the
+  intended workflow, not a flaky test).
+- Progress is per-browser localStorage (`lib/learn/progress.ts`) — no table, by design.
