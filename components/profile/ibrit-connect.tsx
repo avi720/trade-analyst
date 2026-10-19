@@ -237,8 +237,13 @@ export function IbritConnect({ connection, syncing, onConnected }: IbritConnectP
           </label>
           <input
             id="ibrit-token"
+            name="ibrit-token"
             type="password"
-            autoComplete="off"
+            // Chrome ignores "off" on password fields and fills the saved site
+            // login; "new-password" marks it as not-a-login, so nothing is filled.
+            autoComplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder={connection ? "••••••••  (להחלפה הדביקו Token חדש)" : "הדביקו את ה-Token כאן"}
@@ -252,9 +257,12 @@ export function IbritConnect({ connection, syncing, onConnected }: IbritConnectP
           </label>
           <input
             id="ibrit-query-id"
+            name="ibrit-query-id"
             type="text"
             inputMode="numeric"
             autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
             value={queryId}
             onChange={(e) => setQueryId(e.target.value)}
             placeholder="123456"
