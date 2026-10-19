@@ -12,8 +12,11 @@ export const IBRIT_MAX_RANGE_DAYS = 365;
 
 // IBKR's documented limit is 1 fetch per second and 10 per minute (rc 1018),
 // per client (token + query ID), not per service code (IBKR, 2026-10-09).
-// Starts are what's limited: a range takes ~10s to answer.
-const MIN_REQUEST_GAP_MS = 1_100;
+// Starts are what's limited: a range takes ~10s to answer. In production a
+// request 1.1s after the previous one still got 1018 (2026-10-19), so starts
+// are spaced wider than documented, and a 1018 is retried after a pause.
+const MIN_REQUEST_GAP_MS = 3_000;
+const RATE_LIMIT_RETRY_DELAYS_MS = [5_000, 15_000];
 const RATE_WINDOW_MS = 60_000;
 export const IBRIT_MAX_REQUESTS_PER_MINUTE = 10;
 
@@ -26,8 +29,12 @@ export class IbritCredentialsError extends Error {
   }
 }
 
+// rc 1018, too many requests. Clears within seconds, so fetchIbritRange
+// retries it before giving up with this (transient) error.
+class IbritRateLimitedError extends IbkrTransientError {}
+
+const RATE_LIMITED_CODE = 1018;
 const TRANSIENT_CODES = new Set([
-  1018, // too many requests
   1019, // statement generation in progress
   1410, // "cannot be processed at this time" — seen when requests overlapped
 ]);
@@ -79,6 +86,7 @@ function handleErrorBody(text: string): void {
   const msg = `IBRIT (${body.rc}): ${typeof body.msg === "string" ? body.msg : "unknown error"}`;
   if (NO_DATA_CODES.has(rc)) return;
   if (rc === BAD_CREDENTIALS_CODE) throw new IbritCredentialsError(msg);
+  if (rc === RATE_LIMITED_CODE) throw new IbritRateLimitedError(msg);
   if (TRANSIENT_CODES.has(rc)) throw new IbkrTransientError(msg);
   throw new Error(msg);
 }
@@ -95,6 +103,19 @@ export async function fetchIbritRange(
   from: string,
   to: string,
 ): Promise<string[]> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetchIbritRangeOnce(token, queryId, from, to);
+    } catch (err) {
+      const delay = RATE_LIMIT_RETRY_DELAYS_MS[attempt];
+      if (!(err instanceof IbritRateLimitedError) || delay === undefined) throw err;
+      console.warn(`[ibrit] rate limited, retrying in ${delay / 1000}s`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+async function fetchIbritRangeOnce(token: string, queryId: string, from: string, to: string): Promise<string[]> {
   const params = new URLSearchParams({ t: token, q: queryId, s: IBRIT_SERVICE_CODE, fd: from, td: to });
 
   await waitForRequestSlot(`${token}\n${queryId}`);

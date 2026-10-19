@@ -35,13 +35,15 @@ export function TabBroker({ userTier }: TabBrokerProps) {
     return () => { cancelled = true; };
   }, []);
 
-  // The connect route clears lastSyncAt; the first background sync writes it.
+  // The connect route clears lastSyncAt and lastSyncStatus; the first
+  // background sync writes the status when it ends, and lastSyncAt too unless
+  // it failed on a transient IBKR error (left for the cron to retry).
   useEffect(() => {
     if (!firstSyncRunning) return;
     const startedAt = Date.now();
     const interval = setInterval(async () => {
       const c = await fetchConnection();
-      if (c?.lastSyncAt) {
+      if (c?.lastSyncAt || c?.lastSyncStatus) {
         setConn(c);
         setFirstSyncRunning(false);
       } else if (Date.now() - startedAt >= POLL_TIMEOUT_MS) {

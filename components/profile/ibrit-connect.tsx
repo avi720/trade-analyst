@@ -120,6 +120,19 @@ function SyncStatus({ connection, syncing }: { connection: ConnectionStatus; syn
     );
   }
   if (!connection.lastSyncAt) {
+    // A status with no lastSyncAt: the first sync stopped on a transient IBKR error.
+    if (connection.lastSyncStatus === "ERROR") {
+      return (
+        <div role="alert" className="space-y-1">
+          <p className="text-red">טעינת ההיסטוריה מ-IBKR לא הצליחה הפעם. ננסה שוב אוטומטית בסנכרון הבא, תוך כמה שעות.</p>
+          {connection.lastSyncError && (
+            <p dir="ltr" className="text-text-dim text-xs font-mono break-words">
+              {connection.lastSyncError}
+            </p>
+          )}
+        </div>
+      );
+    }
     return <p className="text-text-dim">הסנכרון הראשון עוד לא הסתיים</p>;
   }
   const tokenInvalid = connection.lastSyncStatus === IBRIT_TOKEN_INVALID_STATUS;
@@ -224,8 +237,13 @@ export function IbritConnect({ connection, syncing, onConnected }: IbritConnectP
           </label>
           <input
             id="ibrit-token"
+            name="ibrit-token"
             type="password"
-            autoComplete="off"
+            // Chrome ignores "off" on password fields and fills the saved site
+            // login; "new-password" marks it as not-a-login, so nothing is filled.
+            autoComplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder={connection ? "••••••••  (להחלפה הדביקו Token חדש)" : "הדביקו את ה-Token כאן"}
@@ -239,9 +257,12 @@ export function IbritConnect({ connection, syncing, onConnected }: IbritConnectP
           </label>
           <input
             id="ibrit-query-id"
+            name="ibrit-query-id"
             type="text"
             inputMode="numeric"
             autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
             value={queryId}
             onChange={(e) => setQueryId(e.target.value)}
             placeholder="123456"

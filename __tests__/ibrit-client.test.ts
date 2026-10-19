@@ -17,6 +17,7 @@ function mockFetchOnce(body: BodyInit, contentType: string) {
 describe("fetchIbritRange", () => {
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -72,13 +73,48 @@ describe("fetchIbritRange", () => {
     await expect(fetchIbritRange("t", "q", "20260101", "20260101")).rejects.toBeInstanceOf(IbritCredentialsError);
   });
 
-  it("throws IbkrTransientError on rate limit (1018) and generation in progress (1019)", async () => {
-    for (const rc of [1018, 1019]) {
+  it("throws IbkrTransientError on generation in progress (1019) without retrying", async () => {
+    const { fetchIbritRange } = await loadClient();
+    const { IbkrTransientError } = await import("../lib/ibkr/flex-client");
+    const fetchMock = mockFetchOnce('{"msg":"busy","rc":1019}', "application/json");
+    await expect(fetchIbritRange("t", "q", "20260101", "20260101")).rejects.toBeInstanceOf(IbkrTransientError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  describe("rate limited (1018)", () => {
+    const rateLimited = () =>
+      new Response('{"msg":"Too many requests have been made from this token.","rc":1018}', {
+        headers: { "content-type": "application/json" },
+      });
+    afterEach(() => vi.useRealTimers());
+
+    it("retries after a pause and returns the data", async () => {
+      vi.useFakeTimers();
+      const { fetchIbritRange } = await loadClient();
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(rateLimited())
+        .mockResolvedValueOnce(new Response("H,U1,Activity", { headers: { "content-type": "text/plain" } }));
+      vi.stubGlobal("fetch", fetchMock);
+      const pending = fetchIbritRange("t", "q", "20260101", "20260101");
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toEqual(["H,U1,Activity"]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("gives up with IbkrTransientError after three attempts", async () => {
+      vi.useFakeTimers();
       const { fetchIbritRange } = await loadClient();
       const { IbkrTransientError } = await import("../lib/ibkr/flex-client");
-      mockFetchOnce(`{"msg":"busy","rc":${rc}}`, "application/json");
-      await expect(fetchIbritRange("t", "q", "20260101", "20260101")).rejects.toBeInstanceOf(IbkrTransientError);
-    }
+      const fetchMock = vi.fn().mockImplementation(async () => rateLimited());
+      vi.stubGlobal("fetch", fetchMock);
+      const outcome = fetchIbritRange("t", "q", "20260101", "20260101").catch((e) => e);
+      await vi.advanceTimersByTimeAsync(5_000 + 15_000);
+      expect(await outcome).toBeInstanceOf(IbkrTransientError);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
   });
 
   it("throws a plain error for other codes, e.g. a range over 365 days (1059)", async () => {
@@ -96,7 +132,7 @@ describe("fetchIbritRange", () => {
     await expect(fetchIbritRange("t", "q", "20260101", "20260101")).rejects.toThrow(/HTTP error 503/);
   });
 
-  describe("throttle (IBKR: 1 per second, 10 per minute, per token + query ID)", () => {
+  describe("throttle (per token + query ID: starts 3s apart, 10 per minute)", () => {
     async function setup() {
       vi.useFakeTimers();
       const client = await loadClient();
@@ -109,6 +145,7 @@ describe("fetchIbritRange", () => {
       const tokensSent = () => fetchMock.mock.calls.map(([url]) => new URL(url).searchParams.get("t"));
       return { fetchMock, fire, tokensSent };
     }
+    afterEach(() => vi.useRealTimers());
 
     it("doesn't hold one client's requests behind another's", async () => {
       const { fetchMock, fire, tokensSent } = await setup();
@@ -128,18 +165,17 @@ describe("fetchIbritRange", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
       await Promise.all(pending);
     });
-    afterEach(() => vi.useRealTimers());
 
-    it("starts concurrent requests 1.1 seconds apart", async () => {
+    it("starts concurrent requests 3 seconds apart", async () => {
       const { fetchMock, fire } = await setup();
       const pending = fire(3);
       await vi.advanceTimersByTimeAsync(0);
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(1_099);
+      await vi.advanceTimersByTimeAsync(2_999);
       expect(fetchMock).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(1);
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(1_100);
+      await vi.advanceTimersByTimeAsync(3_000);
       expect(fetchMock).toHaveBeenCalledTimes(3);
       await Promise.all(pending);
     });
@@ -147,9 +183,9 @@ describe("fetchIbritRange", () => {
     it("holds the 11th request until a minute after the first", async () => {
       const { fetchMock, fire } = await setup();
       const pending = fire(11);
-      await vi.advanceTimersByTimeAsync(9 * 1_100);
+      await vi.advanceTimersByTimeAsync(9 * 3_000);
       expect(fetchMock).toHaveBeenCalledTimes(10);
-      await vi.advanceTimersByTimeAsync(60_000 - 9 * 1_100 - 1);
+      await vi.advanceTimersByTimeAsync(60_000 - 9 * 3_000 - 1);
       expect(fetchMock).toHaveBeenCalledTimes(10);
       await vi.advanceTimersByTimeAsync(1);
       expect(fetchMock).toHaveBeenCalledTimes(11);

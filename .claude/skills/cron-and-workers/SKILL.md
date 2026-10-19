@@ -34,7 +34,9 @@ caller and the `/admin/ibkr` manual trigger reuses the same code — keep it tha
 paths can't drift.
 
 All connections sync in parallel. IBRIT requests are throttled per token + query ID (IBKR's
-1/second, 10/minute limit is per client), in-process, in `lib/ibkr/ibrit-client.ts`.
+1/second, 10/minute limit is per client), in-process, in `lib/ibkr/ibrit-client.ts`. Starts are
+spaced 3s apart, wider than documented: a request 1.1s after the previous one got rc 1018 in
+production. A 1018 is retried in-request (after 5s, then 15s) before it becomes a transient error.
 
 A connection whose IBRIT token IBKR rejects (rc 1052, usually past its 1-year validity) ends as
 `TOKEN_INVALID`. That does **not** fail the run (`ok` stays true): only the user can renew it,
