@@ -2,11 +2,13 @@ import { withSentryConfig } from '@sentry/nextjs'
 
 // /admin/learn lesson pages read repo source files at request time (lib/learn/read-source.ts).
 // Nothing imports them from the route, so without this the trace leaves them out of the function.
+// __tests__/learn-lessons.test.ts checks every anchored file against this list.
 const LEARN_SOURCE_FILES = [
   './app/**/*.{ts,tsx}',
   './components/**/*.{ts,tsx}',
   './lib/**/*.ts',
   './types/**/*.ts',
+  './__tests__/*.test.ts',
   './proxy.ts',
   './supabase/migrations/*.sql',
 ]

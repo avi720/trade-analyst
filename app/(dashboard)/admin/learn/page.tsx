@@ -3,6 +3,7 @@ import { Clock } from 'lucide-react'
 import { requireAdminPage } from '@/lib/auth/require-admin'
 import { TRACKS } from '@/lib/learn/curriculum'
 import { LessonDoneMark, TrackProgress } from '@/components/learn/lesson-progress'
+import { RichText } from '@/components/learn/rich-text'
 
 export default async function AdminLearnPage() {
   await requireAdminPage()
@@ -44,15 +45,15 @@ export default async function AdminLearnPage() {
                     <span className="mt-0.5">
                       <LessonDoneMark slug={lesson.slug} />
                     </span>
-                    <span className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0">
                       <span className="block text-sm font-medium text-text-main">
                         <span className="font-mono text-text-mute me-2" dir="ltr">
                           {t + 1}.{i + 1}
                         </span>
                         {lesson.title}
                       </span>
-                      <span className="block text-xs text-text-mute mt-0.5">{lesson.summary.replace(/`/g, '')}</span>
-                    </span>
+                      <RichText body={lesson.summary} className="text-xs leading-5 text-text-mute mt-0.5" />
+                    </div>
                     <span className="flex items-center gap-1 text-xs text-text-mute shrink-0">
                       <Clock size={12} aria-hidden="true" />
                       <span className="font-mono">{lesson.minutes}</span> דק׳

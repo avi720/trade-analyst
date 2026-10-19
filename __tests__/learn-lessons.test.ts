@@ -1,8 +1,14 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import { describe, it, expect } from 'vitest'
 import { TRACKS } from '@/lib/learn/curriculum'
 import { extractExcerpt } from '@/lib/learn/excerpt'
+
+// The matcher Next itself uses for outputFileTracingIncludes globs.
+const picomatch = createRequire(import.meta.url)('next/dist/compiled/picomatch') as (
+  globs: string[],
+) => (file: string) => boolean
 
 // Lessons point at real code by text anchors. When a refactor moves or renames
 // an anchored line, this test fails instead of the lesson silently showing a
@@ -54,6 +60,22 @@ describe('curriculum', () => {
     expect(new Set(slugs).size).toBe(slugs.length)
     for (const { track, lesson } of lessons) {
       expect(lesson.slug.startsWith(`${track.id}-`), lesson.slug).toBe(true)
+    }
+  })
+
+  it('only anchors to files shipped with the lesson route on Vercel', () => {
+    // next.config.mjs is not importable here (allowJs is off), so read the glob list as text.
+    const config = readFileSync(path.join(process.cwd(), 'next.config.mjs'), 'utf8')
+    const list = config.match(/const LEARN_SOURCE_FILES = \[([\s\S]*?)\]/)
+    expect(list, 'LEARN_SOURCE_FILES in next.config.mjs').not.toBeNull()
+    const globs = [...list![1].matchAll(/'\.\/([^']+)'/g)].map(m => m[1])
+    const isShipped = picomatch(globs)
+    for (const { lesson } of lessons) {
+      for (const block of lesson.blocks) {
+        if (block.kind === 'source') {
+          expect(isShipped(block.ref.file), `${lesson.slug}: ${block.ref.file} not in LEARN_SOURCE_FILES`).toBe(true)
+        }
+      }
     }
   })
 
