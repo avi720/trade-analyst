@@ -183,5 +183,6 @@ function langForFile(file: string): CodeLang {
   if (file.endsWith('.sh')) return 'bash'
   if (/\.(m?js|cjs)$/.test(file)) return 'js'
   if (file.endsWith('.json')) return 'json'
+  if (/\.ya?ml$/.test(file)) return 'yaml'
   return 'ts'
 }

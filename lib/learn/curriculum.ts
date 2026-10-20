@@ -3,10 +3,13 @@ import { jsTrack } from './tracks/js'
 import { tsTrack } from './tracks/ts'
 import { reactTrack } from './tracks/react'
 import { pythonTrack } from './tracks/python'
+import { aiTrack } from './tracks/ai'
+import { apiTrack } from './tracks/api'
 
-// Suggested order: JS → TS → React → Python. Python is last because its
-// lessons translate code the earlier tracks already explained.
-export const TRACKS: readonly Track[] = [jsTrack, tsTrack, reactTrack, pythonTrack]
+// Suggested order: JS → TS → React → Python, then the applied tracks. Python
+// comes after the web tracks because its lessons translate code they explained;
+// AI and APIs assume all of them.
+export const TRACKS: readonly Track[] = [jsTrack, tsTrack, reactTrack, pythonTrack, aiTrack, apiTrack]
 
 export interface LessonLocation {
   track: Track

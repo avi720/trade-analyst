@@ -2,7 +2,7 @@ import { createHighlighter, type Highlighter } from 'shiki'
 import type { CodeLang } from './types'
 
 const THEME = 'github-dark-default'
-const LANGS: CodeLang[] = ['ts', 'tsx', 'js', 'python', 'sql', 'bash', 'json']
+const LANGS: CodeLang[] = ['ts', 'tsx', 'js', 'python', 'sql', 'bash', 'json', 'yaml']
 
 // One highlighter per server instance — creating it loads every grammar.
 let highlighterPromise: Promise<Highlighter> | null = null

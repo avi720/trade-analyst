@@ -87,8 +87,8 @@ hands the frozen snapshot to `components/admin/admin-health-dashboard.tsx`.
 
 ## Learn — code-tour course
 
-`/admin/learn`, `/admin/learn/[slug]` — a JS / TS / React / Python course taught through this
-repo's own code. Lessons are data in `lib/learn/tracks/*.ts` (model: `lib/learn/types.ts`).
+`/admin/learn`, `/admin/learn/[slug]` — a JS / TS / React / Python / AI (Gemini) / APIs course
+taught through this repo's own code. Lessons are data in `lib/learn/tracks/*.ts` (model: `lib/learn/types.ts`).
 
 - A `source` block never copies code: it names a file plus a text anchor, and the page reads
   the excerpt from disk per request (`lib/learn/read-source.ts`) and highlights it with Shiki

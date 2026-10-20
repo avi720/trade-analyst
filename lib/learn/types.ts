@@ -1,12 +1,12 @@
 // Lesson model for the admin-only learning platform (/admin/learn).
 //
-// Lessons teach JS / TS / React / Python through this repo's own code. A
+// Lessons teach JS / TS / React / Python, AI and APIs through this repo's own code. A
 // `source` block never copies code — it points at a real file plus a text
 // anchor, and the excerpt is read from disk at render time, so lessons follow
 // the code as it changes. `__tests__/learn-lessons.test.ts` fails the build
 // when an anchor stops resolving.
 
-export type CodeLang = 'ts' | 'tsx' | 'js' | 'python' | 'sql' | 'bash' | 'json'
+export type CodeLang = 'ts' | 'tsx' | 'js' | 'python' | 'sql' | 'bash' | 'json' | 'yaml'
 
 export interface SourceRef {
   /** Repo-relative path, forward slashes: `lib/trade/fifo.ts`. */
@@ -61,7 +61,7 @@ export interface Lesson {
   blocks: Block[]
 }
 
-export type TrackId = 'js' | 'ts' | 'react' | 'python'
+export type TrackId = 'js' | 'ts' | 'react' | 'python' | 'ai' | 'api'
 
 export interface Track {
   id: TrackId

@@ -10,6 +10,8 @@ const LEARN_SOURCE_FILES = [
   './types/**/*.ts',
   './__tests__/*.test.ts',
   './proxy.ts',
+  './scripts/*.ts',
+  './.github/workflows/*.yml',
   './supabase/migrations/*.sql',
 ]
 
