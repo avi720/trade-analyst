@@ -92,7 +92,8 @@ export async function POST(request: Request) {
   // delivery attempt, so an INSERT on the UNIQUE event_id column short-circuits
   // duplicate deliveries at the DB layer. We attempt the INSERT before touching
   // User state — if it succeeds we own the write; if it fails with 23505 we ack
-  // 200 without re-writing.
+  // 200 without re-writing. If the User write then fails, the claim is released
+  // (below) so the retry LS sends on our 500 is processed, not deduped.
   const eventId = createHash('sha256').update(rawBody).digest('hex')
   const { error: insertErr } = await admin
     .from('BillingWebhookEvent')
@@ -116,19 +117,28 @@ export async function POST(request: Request) {
   const status = payload.data.attributes.status
   const renewsAt = payload.data.attributes.renews_at
   const endsAt = payload.data.attributes.ends_at
+  const eventUpdatedAt = normalizeTimestamp(payload.data.attributes.updated_at)
 
   const newTier = grantsPro(status, endsAt) ? 'Pro' : 'Free'
 
   const { data: prior } = await admin
     .from('User')
-    .select('subscriptionTier')
+    .select('subscriptionTier, lemonsqueezyUpdatedAt')
     .eq('id', userId)
     .maybeSingle()
 
-  // X14: use .select('id') on the update so we can detect zero-row responses
-  // — happens when the user_id is a valid UUID but no matching row exists
-  // (account deleted between checkout and this webhook, test-mode leak, race).
-  const { data: updated, error } = await admin
+  // Ordering: LS retries and reorders deliveries, and the ledger above only
+  // dedupes byte-identical repeats. The subscription's `updated_at` versions
+  // its state, so an event applies only when strictly newer than the version
+  // already on the row — otherwise a delayed `subscription_updated` (active)
+  // landing after `subscription_cancelled` would re-grant Pro. Equal counts as
+  // stale: first applied wins, and LS fires several events per state change
+  // (e.g. cancelled + updated) carrying the same object version. The check is
+  // in the UPDATE's WHERE, not just against `prior`, so two concurrent
+  // deliveries can't both pass it. One version per User row (not per
+  // subscription id) also stops a late event from an old subscription
+  // overwriting a newer one's state.
+  let update = admin
     .from('User')
     .update({
       subscriptionTier: newTier,
@@ -136,13 +146,65 @@ export async function POST(request: Request) {
       subscriptionRenewsAt: renewsAt,
       lemonsqueezySubscriptionId: subscriptionId,
       lemonsqueezyCustomerId: customerId || null,
+      ...(eventUpdatedAt ? { lemonsqueezyUpdatedAt: eventUpdatedAt } : {}),
     })
     .eq('id', userId)
-    .select('id')
+  if (eventUpdatedAt) {
+    update = update.or(
+      `lemonsqueezyUpdatedAt.is.null,lemonsqueezyUpdatedAt.lt.${eventUpdatedAt}`,
+    )
+  } else {
+    // LS always sends updated_at on subscription objects; without it there is
+    // nothing to order by, so apply as before but leave the stored version.
+    console.warn('[billing/webhook] event missing data.attributes.updated_at:', eventName, subscriptionId)
+  }
+
+  // X14: use .select('id') on the update so we can detect zero-row responses
+  // — happens when the user_id is a valid UUID but no matching row exists
+  // (account deleted between checkout and this webhook, test-mode leak, race).
+  const { data: updated, error } = await update.select('id')
 
   if (error) {
     console.error('[billing/webhook] failed to update user:', error.message)
+    // Give the ledger claim back, or LS's retry (same body → same event_id)
+    // would hit 23505 and be acked as a duplicate without ever writing. A
+    // concurrent duplicate acked while we held the claim is fine: this retry
+    // carries the same event. Re-applying is safe — nothing was written, and
+    // the updated_at guard rejects anything not newer.
+    const { error: releaseErr } = await admin
+      .from('BillingWebhookEvent')
+      .delete()
+      .eq('event_id', eventId)
+    if (releaseErr) {
+      console.error(
+        '[billing/webhook] failed to release ledger row — LS retry will be acked as duplicate, event lost:',
+        eventName, subscriptionId, eventId.slice(0, 12), releaseErr.message,
+      )
+    }
     return NextResponse.json({ error: 'db update failed' }, { status: 500 })
+  }
+
+  if ((!updated || updated.length === 0) && prior && eventUpdatedAt) {
+    // The row exists, so zero rows means the ordering filter rejected it: a
+    // newer (or same) version is already applied. Ack so LS stops retrying.
+    console.info(
+      '[billing/webhook] stale event ignored:', eventName, subscriptionId,
+      'event updated_at:', eventUpdatedAt, 'applied:', prior.lemonsqueezyUpdatedAt,
+    )
+    await logAuditEvent({
+      userId,
+      eventType: 'subscription_stale_ignored',
+      status: 'success',
+      metadata: {
+        lsEvent: eventName,
+        lsStatus: status,
+        lsSubscriptionId: subscriptionId,
+        eventUpdatedAt,
+        appliedUpdatedAt: prior.lemonsqueezyUpdatedAt,
+      },
+      request,
+    })
+    return NextResponse.json({ ok: true, ignored: 'stale' })
   }
 
   if (!updated || updated.length === 0) {
@@ -185,4 +247,12 @@ export async function POST(request: Request) {
   })
 
   return NextResponse.json({ ok: true })
+}
+
+// ISO string from LS → canonical ISO (ms precision) so the PostgREST filter
+// value has a fixed, safe shape. Null when absent or unparseable.
+function normalizeTimestamp(value: string | null | undefined): string | null {
+  if (!value) return null
+  const ms = Date.parse(value)
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null
 }
