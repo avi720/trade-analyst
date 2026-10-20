@@ -24,6 +24,8 @@ shape it — don't "fix" either:
 ## Webhook invariants
 
 - Idempotent by `sha256(rawBody)` on a UNIQUE ledger column — duplicates ack 200 without writing.
+  The ledger row is claimed before the User write, so a failed write **must delete it** before
+  returning 500; otherwise LS's identical retry is deduped and the event is lost.
 - Ordered by the subscription's `data.attributes.updated_at`, stored on
   `User.lemonsqueezyUpdatedAt`: an event applies only if **strictly newer** (equal = stale, first
   applied wins), enforced in the UPDATE's WHERE so concurrent deliveries can't race. Stale events

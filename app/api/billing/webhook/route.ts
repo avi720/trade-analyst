@@ -92,7 +92,8 @@ export async function POST(request: Request) {
   // delivery attempt, so an INSERT on the UNIQUE event_id column short-circuits
   // duplicate deliveries at the DB layer. We attempt the INSERT before touching
   // User state — if it succeeds we own the write; if it fails with 23505 we ack
-  // 200 without re-writing.
+  // 200 without re-writing. If the User write then fails, the claim is released
+  // (below) so the retry LS sends on our 500 is processed, not deduped.
   const eventId = createHash('sha256').update(rawBody).digest('hex')
   const { error: insertErr } = await admin
     .from('BillingWebhookEvent')
@@ -165,6 +166,21 @@ export async function POST(request: Request) {
 
   if (error) {
     console.error('[billing/webhook] failed to update user:', error.message)
+    // Give the ledger claim back, or LS's retry (same body → same event_id)
+    // would hit 23505 and be acked as a duplicate without ever writing. A
+    // concurrent duplicate acked while we held the claim is fine: this retry
+    // carries the same event. Re-applying is safe — nothing was written, and
+    // the updated_at guard rejects anything not newer.
+    const { error: releaseErr } = await admin
+      .from('BillingWebhookEvent')
+      .delete()
+      .eq('event_id', eventId)
+    if (releaseErr) {
+      console.error(
+        '[billing/webhook] failed to release ledger row — LS retry will be acked as duplicate, event lost:',
+        eventName, subscriptionId, eventId.slice(0, 12), releaseErr.message,
+      )
+    }
     return NextResponse.json({ error: 'db update failed' }, { status: 500 })
   }
 

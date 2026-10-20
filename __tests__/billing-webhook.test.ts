@@ -12,6 +12,8 @@
  *   - Ordering — an event applies only if its subscription `updated_at` is
  *           strictly newer than `User.lemonsqueezyUpdatedAt`; older and equal
  *           ones ack 200 `ignored: stale` without changing state
+ *   - A failed User write releases the ledger claim, so LS's identical retry
+ *           is applied instead of being acked as a duplicate
  *
  * Supabase clients + LS config are mocked. HMAC signatures are computed with
  * a fixed test secret so we can build both valid and malformed test cases.
@@ -102,6 +104,12 @@ function makeReq(body: string, signature: string | null): Request {
 // Mock admin client with configurable behavior for the three DB call sites.
 interface AdminMockOpts {
   webhookInsertResult?: { error: { code?: string; message?: string } | null }
+  /**
+   * Stateful ledger shared across deliveries: insert returns 23505 when the
+   * event_id is present, delete removes it. Overrides webhookInsertResult.
+   */
+  ledger?: Set<string>
+  ledgerDeleteResult?: { error: { message: string } | null }
   userSelectResult?: {
     data: { subscriptionTier: string; lemonsqueezyUpdatedAt?: string | null } | null
   }
@@ -119,6 +127,8 @@ function orFilterMatches(filter: string, stored: string | null | undefined): boo
 function mockAdmin(opts: AdminMockOpts = {}) {
   const {
     webhookInsertResult = { error: null },
+    ledger,
+    ledgerDeleteResult = { error: null },
     userSelectResult = { data: { subscriptionTier: 'Free' } },
     userUpdateResult = { data: [{ id: REAL_USER_ID }], error: null },
   } = opts
@@ -130,7 +140,20 @@ function mockAdmin(opts: AdminMockOpts = {}) {
   const chain = (table: string) => {
     if (table === 'BillingWebhookEvent') {
       return {
-        insert: vi.fn(async () => webhookInsertResult),
+        insert: vi.fn(async (row: { event_id: string }) => {
+          if (!ledger) return webhookInsertResult
+          if (ledger.has(row.event_id)) {
+            return { error: { code: '23505', message: 'unique violation on event_id' } }
+          }
+          ledger.add(row.event_id)
+          return { error: null }
+        }),
+        delete: vi.fn(() => ({
+          eq: vi.fn(async (_col: string, eventId: string) => {
+            if (!ledgerDeleteResult.error) ledger?.delete(eventId)
+            return ledgerDeleteResult
+          }),
+        })),
       }
     }
     if (table === 'User') {
@@ -478,5 +501,67 @@ describe('/api/billing/webhook — out-of-order delivery', () => {
     expect(client.orFilters).toEqual([])
     expect(client.updatePayloads[0]).not.toHaveProperty('lemonsqueezyUpdatedAt')
     expect(warn).toHaveBeenCalled()
+  })
+})
+
+describe('/api/billing/webhook — a failed User write stays retryable', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    vi.clearAllMocks()
+    vi.mocked(getLemonSqueezyConfig).mockReturnValue(makeConfig())
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  const UPDATE_FAILED = { data: null, error: { message: 'connection reset' } }
+
+  it('User update fails → 500 and ledger released; the identical redelivery is applied', async () => {
+    const ledger = new Set<string>()
+    const body = makeBody({ eventName: 'subscription_cancelled', status: 'expired' })
+
+    mockAdmin({ ledger, userUpdateResult: UPDATE_FAILED })
+    const first = await POST(makeReq(body, sign(body)))
+    expect(first.status).toBe(500)
+    expect(ledger.size).toBe(0)
+
+    const retry = mockAdmin({ ledger })
+    const second = await POST(makeReq(body, sign(body)))
+    expect(second.status).toBe(200)
+    expect(await second.json()).toEqual({ ok: true })
+    expect(retry.updatePayloads).toHaveLength(1)
+    expect(retry.updatePayloads[0]).toMatchObject({ subscriptionStatus: 'expired' })
+    expect(ledger.size).toBe(1)
+  })
+
+  it('after a successful write the redelivery is still deduped', async () => {
+    const ledger = new Set<string>()
+    const body = makeBody()
+
+    mockAdmin({ ledger })
+    expect((await POST(makeReq(body, sign(body)))).status).toBe(200)
+
+    const retry = mockAdmin({ ledger })
+    const res = await POST(makeReq(body, sign(body)))
+    expect(await res.json()).toEqual({ ok: true, duplicate: true })
+    expect(retry.from).not.toHaveBeenCalledWith('User')
+  })
+
+  it('ledger release itself fails → still 500, logged as a lost event', async () => {
+    const ledger = new Set<string>()
+    const body = makeBody()
+    mockAdmin({
+      ledger,
+      userUpdateResult: UPDATE_FAILED,
+      ledgerDeleteResult: { error: { message: 'permission denied' } },
+    })
+    const res = await POST(makeReq(body, sign(body)))
+    expect(res.status).toBe(500)
+    expect(ledger.size).toBe(1)
+    expect(vi.mocked(console.error)).toHaveBeenCalledWith(
+      expect.stringContaining('failed to release ledger row'),
+      'subscription_created',
+      'sub_1',
+      expect.any(String),
+      'permission denied',
+    )
   })
 })
