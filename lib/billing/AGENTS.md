@@ -24,6 +24,12 @@ shape it — don't "fix" either:
 ## Webhook invariants
 
 - Idempotent by `sha256(rawBody)` on a UNIQUE ledger column — duplicates ack 200 without writing.
+- Ordered by the subscription's `data.attributes.updated_at`, stored on
+  `User.lemonsqueezyUpdatedAt`: an event applies only if **strictly newer** (equal = stale, first
+  applied wins), enforced in the UPDATE's WHERE so concurrent deliveries can't race. Stale events
+  ack 200 `ignored: stale` + a `subscription_stale_ignored` audit row. One version per User row,
+  not per subscription id. Anything else that writes the billing columns (admin toggle) leaves
+  this column alone.
 - Always ack what should not be retried (unknown events, non-UUID ids, orphaned users);
   return 500 only when a retry can succeed. An orphaned subscription is logged with
   `userId: null` (FK to `User`) and the id in metadata.

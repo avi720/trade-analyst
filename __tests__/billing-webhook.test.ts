@@ -9,6 +9,9 @@
  *   - X14 — orphan user_id (valid UUID but no matching User row) returns 200
  *           and emits a `subscription_orphaned` AuditEvent with userId null
  *           (FK to User) and the LS user_id in metadata
+ *   - Ordering — an event applies only if its subscription `updated_at` is
+ *           strictly newer than `User.lemonsqueezyUpdatedAt`; older and equal
+ *           ones ack 200 `ignored: stale` without changing state
  *
  * Supabase clients + LS config are mocked. HMAC signatures are computed with
  * a fixed test secret so we can build both valid and malformed test cases.
@@ -40,6 +43,7 @@ import { POST } from '@/app/api/billing/webhook/route'
 
 const TEST_SECRET = 'test-webhook-secret'
 const REAL_USER_ID = 'a0000000-0000-0000-0000-000000000010'
+const DEFAULT_UPDATED_AT = '2026-10-20T10:00:00.000000Z'
 
 function makeConfig() {
   return {
@@ -63,7 +67,10 @@ function makeBody(overrides?: {
   status?: string
   subscriptionId?: string
   endsAt?: string | null
+  /** null omits the field entirely. */
+  updatedAt?: string | null
 }) {
+  const updatedAt = overrides?.updatedAt === undefined ? DEFAULT_UPDATED_AT : overrides.updatedAt
   return JSON.stringify({
     meta: {
       event_name: overrides?.eventName ?? 'subscription_created',
@@ -76,6 +83,7 @@ function makeBody(overrides?: {
         customer_id: 12345,
         renews_at: '2027-01-01T00:00:00Z',
         ends_at: overrides?.endsAt ?? null,
+        ...(updatedAt === null ? {} : { updated_at: updatedAt }),
       },
     },
   })
@@ -94,8 +102,18 @@ function makeReq(body: string, signature: string | null): Request {
 // Mock admin client with configurable behavior for the three DB call sites.
 interface AdminMockOpts {
   webhookInsertResult?: { error: { code?: string; message?: string } | null }
-  userSelectResult?: { data: { subscriptionTier: string } | null }
+  userSelectResult?: {
+    data: { subscriptionTier: string; lemonsqueezyUpdatedAt?: string | null } | null
+  }
   userUpdateResult?: { data: { id: string }[] | null; error: { message: string } | null }
+}
+
+// Emulates PostgREST's `or=(col.is.null,col.lt.<ts>)` against the stored version.
+function orFilterMatches(filter: string, stored: string | null | undefined): boolean {
+  const m = /^lemonsqueezyUpdatedAt\.is\.null,lemonsqueezyUpdatedAt\.lt\.(.+)$/.exec(filter)
+  if (!m) throw new Error(`unexpected or() filter in test: ${filter}`)
+  if (stored == null) return true
+  return Date.parse(stored) < Date.parse(m[1])
 }
 
 function mockAdmin(opts: AdminMockOpts = {}) {
@@ -105,6 +123,7 @@ function mockAdmin(opts: AdminMockOpts = {}) {
     userUpdateResult = { data: [{ id: REAL_USER_ID }], error: null },
   } = opts
   const updatePayloads: Record<string, unknown>[] = []
+  const orFilters: string[] = []
 
   // Postgrest chain: .from(table).insert(row) / .update(row).eq(k,v).select(cols) /
   // .select(cols).eq(k,v).maybeSingle()
@@ -116,9 +135,19 @@ function mockAdmin(opts: AdminMockOpts = {}) {
     }
     if (table === 'User') {
       // For both select-then-update patterns we need to support both chains.
+      let filterRejected = false
       const updateChain = {
         eq: vi.fn().mockReturnThis(),
-        select: vi.fn(async () => userUpdateResult),
+        or: vi.fn((filter: string) => {
+          orFilters.push(filter)
+          if (!orFilterMatches(filter, userSelectResult.data?.lemonsqueezyUpdatedAt)) {
+            filterRejected = true
+          }
+          return updateChain
+        }),
+        select: vi.fn(async () =>
+          filterRejected ? { data: [], error: null } : userUpdateResult,
+        ),
       }
       const selectChain = {
         eq: vi.fn().mockReturnThis(),
@@ -135,7 +164,7 @@ function mockAdmin(opts: AdminMockOpts = {}) {
     throw new Error(`unexpected table access in test: ${table}`)
   }
 
-  const client = { from: vi.fn(chain), updatePayloads }
+  const client = { from: vi.fn(chain), updatePayloads, orFilters }
   vi.mocked(createAdminClient).mockReturnValue(
     client as unknown as ReturnType<typeof createAdminClient>,
   )
@@ -251,6 +280,7 @@ describe('/api/billing/webhook — hardening', () => {
   describe('X14 — orphaned user_id (valid UUID, no User row) → 200 + audit', () => {
     it('User update returns zero rows → 200 ignored:user_not_found + subscription_orphaned audit', async () => {
       mockAdmin({
+        userSelectResult: { data: null },
         userUpdateResult: { data: [], error: null },
       })
       const body = makeBody()
@@ -319,5 +349,134 @@ describe('/api/billing/webhook — cancelled keeps Pro until the paid period end
   it('resume before the period ends → Pro, status active', async () => {
     const update = await deliver('subscription_resumed', 'active', null)
     expect(update).toMatchObject({ subscriptionTier: 'Pro', subscriptionStatus: 'active' })
+  })
+})
+
+describe('/api/billing/webhook — out-of-order delivery', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    vi.clearAllMocks()
+    vi.mocked(getLemonSqueezyConfig).mockReturnValue(makeConfig())
+  })
+
+  const DAY = 24 * 60 * 60 * 1000
+  const inDays = (n: number) => new Date(Date.now() + n * DAY).toISOString()
+
+  async function deliver(opts: {
+    eventName: string
+    status: string
+    updatedAt: string | null
+    applied: string | null
+    priorTier?: string
+    endsAt?: string | null
+  }) {
+    const client = mockAdmin({
+      userSelectResult: {
+        data: { subscriptionTier: opts.priorTier ?? 'Pro', lemonsqueezyUpdatedAt: opts.applied },
+      },
+    })
+    const body = makeBody({
+      eventName: opts.eventName,
+      status: opts.status,
+      updatedAt: opts.updatedAt,
+      endsAt: opts.endsAt ?? null,
+    })
+    const res = await POST(makeReq(body, sign(body)))
+    expect(res.status).toBe(200)
+    return { client, json: await res.json() }
+  }
+
+  it('newer event applies and records its updated_at as the applied version', async () => {
+    const { client, json } = await deliver({
+      eventName: 'subscription_expired',
+      status: 'expired',
+      updatedAt: '2026-10-20T12:00:00.000000Z',
+      applied: '2026-10-20T10:00:00.000Z',
+    })
+    expect(json).toEqual({ ok: true })
+    expect(client.orFilters).toEqual([
+      'lemonsqueezyUpdatedAt.is.null,lemonsqueezyUpdatedAt.lt.2026-10-20T12:00:00.000Z',
+    ])
+    expect(client.updatePayloads[0]).toMatchObject({
+      subscriptionTier: 'Free',
+      subscriptionStatus: 'expired',
+      lemonsqueezyUpdatedAt: '2026-10-20T12:00:00.000Z',
+    })
+    expect(vi.mocked(logAuditEvent).mock.calls[0][0].eventType).toBe('tier_downgraded')
+  })
+
+  it('first event for a row with no applied version applies', async () => {
+    const { json, client } = await deliver({
+      eventName: 'subscription_created',
+      status: 'active',
+      updatedAt: DEFAULT_UPDATED_AT,
+      applied: null,
+      priorTier: 'Free',
+    })
+    expect(json).toEqual({ ok: true })
+    expect(client.updatePayloads[0]).toMatchObject({ subscriptionTier: 'Pro' })
+  })
+
+  it('delayed subscription_updated (active) after an applied cancellation → ignored, logged, no Pro re-grant', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const { json } = await deliver({
+      eventName: 'subscription_updated',
+      status: 'active',
+      updatedAt: '2026-10-20T09:00:00.000000Z',
+      applied: '2026-10-20T10:00:00.000Z',
+      priorTier: 'Free',
+    })
+    expect(json).toEqual({ ok: true, ignored: 'stale' })
+
+    const audits = vi.mocked(logAuditEvent).mock.calls.map((c) => c[0])
+    expect(audits).toHaveLength(1)
+    expect(audits[0]).toMatchObject({
+      userId: REAL_USER_ID,
+      eventType: 'subscription_stale_ignored',
+      metadata: {
+        lsEvent: 'subscription_updated',
+        lsStatus: 'active',
+        eventUpdatedAt: '2026-10-20T09:00:00.000Z',
+        appliedUpdatedAt: '2026-10-20T10:00:00.000Z',
+      },
+    })
+    expect(info).toHaveBeenCalledWith(
+      '[billing/webhook] stale event ignored:',
+      'subscription_updated',
+      'sub_1',
+      'event updated_at:',
+      '2026-10-20T09:00:00.000Z',
+      'applied:',
+      '2026-10-20T10:00:00.000Z',
+    )
+  })
+
+  it('equal updated_at → ignored deterministically (first applied wins)', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    // LS fires subscription_cancelled and subscription_updated for the same
+    // change with the same object version — only the first one writes.
+    const { json } = await deliver({
+      eventName: 'subscription_updated',
+      status: 'cancelled',
+      endsAt: inDays(8),
+      updatedAt: '2026-10-20T10:00:00.000000Z',
+      applied: '2026-10-20T10:00:00.000Z',
+    })
+    expect(json).toEqual({ ok: true, ignored: 'stale' })
+    expect(vi.mocked(logAuditEvent).mock.calls[0][0].eventType).toBe('subscription_stale_ignored')
+  })
+
+  it('payload without updated_at → applies as before, no ordering filter, stored version untouched', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { json, client } = await deliver({
+      eventName: 'subscription_updated',
+      status: 'active',
+      updatedAt: null,
+      applied: '2026-10-20T10:00:00.000Z',
+    })
+    expect(json).toEqual({ ok: true })
+    expect(client.orFilters).toEqual([])
+    expect(client.updatePayloads[0]).not.toHaveProperty('lemonsqueezyUpdatedAt')
+    expect(warn).toHaveBeenCalled()
   })
 })

@@ -123,6 +123,8 @@ export interface WebhookSubscriptionData {
     customer_id: number
     renews_at: string | null
     ends_at: string | null
+    // Version of the subscription object; the webhook orders events by it.
+    updated_at?: string | null
   }
   meta?: {
     custom_data?: { user_id?: string }

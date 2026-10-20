@@ -13,6 +13,7 @@ export type AuditEventType =
   | "tier_downgraded"
   | "subscription_updated"
   | "subscription_orphaned" // X14 — webhook fired for a user_id with no matching User row
+  | "subscription_stale_ignored" // webhook dropped an event not newer than the applied updated_at
   | "signup_completed"
   | "oauth_callback_failed"
   | "auth_callback_no_code";
