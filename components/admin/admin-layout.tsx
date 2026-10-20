@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { Users, FileSpreadsheet, Plug, Activity, HeartPulse } from 'lucide-react'
+import { Users, FileSpreadsheet, Plug, Activity, HeartPulse, GraduationCap } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { AdminContentSkeleton } from './admin-content-skeleton'
 
@@ -13,6 +13,7 @@ const TABS = [
   { id: 'ibkr', label: 'ברוקר', href: '/admin/ibkr', icon: Plug },
   { id: 'broker-events', label: 'אירועי ברוקר', href: '/admin/broker-events', icon: Activity },
   { id: 'health', label: 'בריאות', href: '/admin/health', icon: HeartPulse },
+  { id: 'learn', label: 'למידה', href: '/admin/learn', icon: GraduationCap },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
