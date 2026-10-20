@@ -221,7 +221,170 @@ export async function POST(
     },
 
     // -----------------------------------------------------------------------
-    // 2. Calling someone else's API
+    // 2. REST — our endpoints and Supabase (PostgREST)
+    // -----------------------------------------------------------------------
+    {
+      slug: 'api-rest-and-postgrest',
+      title: 'REST: המשאבים שלנו, פעולות, ו-Supabase כ-REST API',
+      summary: 'מה הופך API ל-REST, למה סגירת פוזיציה היא `POST .../close` ולא `PATCH`, ואיך כל `supabase.from(...)` בקוד הוא בעצם בקשת HTTP ל-PostgREST.',
+      minutes: 16,
+      blocks: [
+        {
+          kind: 'text',
+          body: `**REST** הוא סגנון לתכנון API מעל HTTP, לא ספרייה ולא פרוטוקול. הרעיונות המרכזיים:
+
+- **משאבים** (שמות עצם) ב-URL: \`/api/trades/{id}\` הוא טרייד אחד.
+- **מתודות** (פעלים) אומרות מה עושים למשאב: \`GET\` קורא, \`POST\` יוצר, \`PATCH\` משנה חלק, \`PUT\` מחליף, \`DELETE\` מוחק.
+- **סטטוס** אומר מה קרה: 200, 404, 409 וכו׳ — מהשיעור הקודם.
+- **בלי מצב בשרת בין בקשות** (stateless): כל בקשה נושאת את כל מה שצריך, כולל הזהות (cookie או header).
+
+רוב ה-API של האתר בנוי כך, אבל לא כולו — וזה בכוונה.`,
+        },
+        {
+          kind: 'compare',
+          left: {
+            lang: 'bash',
+            title: 'REST קלאסי — משאב + מתודה',
+            code: `GET    /api/trades/tags           # the caller's tags
+DELETE /api/trades/{id}           # delete one trade
+DELETE /api/admin/jobs/{jobId}    # delete one AI-import job`,
+          },
+          right: {
+            lang: 'bash',
+            title: 'action-style — הפועל בתוך ה-URL',
+            code: `POST /api/trades/{id}/close               # close a position
+POST /api/trades/{id}/add-to-position     # scale in
+POST /api/admin/users/{userId}/toggle-tier`,
+          },
+        },
+        {
+          kind: 'text',
+          body: `למה לא פשוט \`PATCH /api/trades/{id}\` עם \`{ status: 'Closed' }\`? כי סגירה היא **פעולה עסקית**, לא "תעדכן לי שדה": היא עוברת דרך מנוע ה-FIFO, מחשבת \`realizedPnl\` ו-R, מוסיפה שורה להערות ובודקת שהטרייד בכלל פתוח. \`PATCH\` כללי היה מזמין את הלקוח לשלוח כל שדה שבא לו. endpoint של פעולה מגדיר בדיוק מה מותר — וזה גם מה שהכלל "manual entry opens positions and nothing else" נשען עליו.`,
+        },
+        {
+          kind: 'source',
+          title: 'POST /api/trades/[id]/close — הבדיקות מול המצב הנוכחי',
+          ref: { file: 'app/api/trades/[id]/close/route.ts', start: "if (trade.source !== 'manual') {", lines: 6 },
+          notes: [
+            { match: 'status: 403', text: 'הטרייד שלך, אבל הוא הגיע מהברוקר — אסור לערוך אותו ידנית, כי הסנכרון הבא היה "נלחם" בשינוי. 403 = מזוהה אבל לא מורשה לפעולה הזו.' },
+            { match: 'status: 409', text: '409 Conflict: הבקשה תקינה, אבל מתנגשת ב**מצב הנוכחי** של המשאב. טרייד שכבר נסגר לא נסגר שוב.' },
+          ],
+        },
+        {
+          kind: 'quiz',
+          question: 'המשתמש לחץ פעמיים מהר על "סגור פוזיציה", ושתי בקשות `POST .../close` יצאו. הראשונה הצליחה. מה מקבלת השנייה?',
+          options: ['`200` — סוגרת שוב', '`404` — הטרייד נמחק', '`409` — הטרייד כבר לא Open', '`500` — שגיאת שרת'],
+          answer: 2,
+          explanation: 'אחרי הבקשה הראשונה `status` הוא `Closed`, אז הבדיקה `trade.status !== \'Open\'` מחזירה 409. `POST` לא אידמפוטנטי מטבעו — הבדיקה מול המצב הנוכחי היא מה שמונע סגירה כפולה.',
+        },
+        {
+          kind: 'text',
+          body: `עכשיו ההפתעה: גם כשהקוד "מדבר עם מסד הנתונים", הוא בעצם קורא ל-**REST API**. ‏Supabase מריץ מעל Postgres שירות בשם **PostgREST**, שהופך כל טבלה למשאב REST בכתובת \`/rest/v1/<Table>\`. הספרייה \`@supabase/supabase-js\` היא בסך הכל client נוח שבונה את בקשות ה-HTTP האלה.`,
+        },
+        {
+          kind: 'source',
+          title: 'הלקוח בצד השרת — כתובת, מפתח ו-cookies',
+          ref: { file: 'lib/supabase/server.ts', start: 'return createServerClient<Database>(', lines: 3 },
+          notes: [
+            { match: 'NEXT_PUBLIC_SUPABASE_URL', text: 'בסיס ה-URL של הפרויקט. כל בקשה הולכת ל-`<url>/rest/v1/...`.' },
+            { match: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', text: 'המפתח הציבורי — נשלח ב-header בשם `apikey`. הוא **לא סוד** (הוא אפילו `NEXT_PUBLIC_`); הוא רק אומר "הבקשה הגיעה מהאפליקציה הזו". מי המשתמש — את זה קובע ה-JWT שמגיע מה-cookies ונשלח כ-`Authorization: Bearer ...`.' },
+          ],
+        },
+        {
+          kind: 'source',
+          title: 'שאילתה מ-GET /api/trades/tags',
+          ref: { file: 'app/api/trades/tags/route.ts', start: 'const { data, error } = await supabase', end: ".not('tags', 'eq', '{}')" },
+          notes: [
+            { match: ".from('Trade')", text: 'המשאב: `/rest/v1/Trade`. בלי `.insert`/`.update`/`.delete` — זו קריאה, כלומר `GET`.' },
+            { match: ".select('tags')", text: 'הופך ל-query param ‏`select=tags` — אילו עמודות להחזיר.' },
+            { match: ".eq('userId', user.id)", text: 'פילטר: `userId=eq.<uuid>`. ה-RLS היה מסנן לפי המשתמש בכל מקרה; הפילטר המפורש הוא חגורה ושלייקס.' },
+            { match: ".not('tags', 'eq', '{}')", text: 'פילטר שלילי: `tags=not.eq.{}` — רק טריידים שיש להם לפחות תג אחד.' },
+          ],
+        },
+        {
+          kind: 'snippet',
+          lang: 'bash',
+          title: 'אותה שאילתה כבקשת HTTP גולמית (ערכים להמחשה)',
+          code: `curl "https://<project-ref>.supabase.co/rest/v1/Trade?select=tags&userId=eq.<user-uuid>&tags=not.eq.%7B%7D" \\
+  -H "apikey: <anon-key>" \\
+  -H "Authorization: Bearer <user-access-token>"
+
+# 200 OK
+# [{"tags":["breakout","earnings"]},{"tags":["breakout"]}]`,
+        },
+        {
+          kind: 'text',
+          body: `המיפוי המלא בין ה-client לבין HTTP (בדקתי מול הקוד של \`postgrest-js\` שמותקן בפרויקט):
+
+- \`.select(...)\` → \`GET /rest/v1/<Table>\`
+- \`.insert(...)\` → \`POST\`
+- \`.upsert(...)\` → \`POST\` עם header \`Prefer: resolution=merge-duplicates\`
+- \`.update(...)\` → \`PATCH\`
+- \`.delete()\` → \`DELETE\`
+- \`.rpc('fn', args)\` → \`POST /rest/v1/rpc/fn\` — קריאה לפונקציית Postgres
+- \`.eq\`, \`.not\`, \`.order\`, \`.limit\` → query params (\`status=eq.Closed\`, \`order=closedAt.desc\`, \`limit=5\`)
+- \`.single()\` → header \`Accept: application/vnd.pgrst.object+json\` (השרת מחזיר אובייקט אחד או שגיאה); \`.maybeSingle()\` לעומת זאת שולח בקשה רגילה ובודק בצד ה-client שחזרו 0 או 1 שורות.`,
+        },
+        {
+          kind: 'source',
+          title: 'כשבקשת REST אחת לא מספיקה — RPC',
+          ref: { file: 'lib/ibkr/process-executions.ts', start: 'const { error: rpcErr } = await admin.rpc("reverse_position", {' },
+          notes: [
+            { match: 'admin.rpc("reverse_position"', text: 'בפועל: `POST /rest/v1/rpc/reverse_position` עם הארגומנטים כ-JSON. היפוך פוזיציה הוא שתי כתיבות (סגירה + פתיחה), וכל בקשת REST היא טרנזקציה נפרדת — לכן זה רץ כפונקציית Postgres אחת, אטומית.' },
+            { match: 'p_close_order', text: 'אובייקטים מקוננים עוברים כ-`jsonb`; הפונקציה מפרקת אותם בתוך הטרנזקציה.' },
+          ],
+        },
+        {
+          kind: 'callout',
+          tone: 'warn',
+          body: 'אם ה-`anon key` ציבורי, מה מונע ממישהו לשלוח `GET /rest/v1/Trade` בעצמו? שתי שכבות: **הרשאות טבלה** (GRANT) ו-**RLS**. ה-`admin` שראית למעלה משתמש במפתח service-role שעוקף את RLS — ולכן הוא חי רק בשרת ולעולם לא ב-`NEXT_PUBLIC_`.',
+        },
+        {
+          kind: 'source',
+          title: 'השכבה שנוספה לאחרונה — אין לבקשות אנונימיות גישה לטבלאות',
+          ref: { file: 'supabase/migrations/20261019092640_revoke_anon_table_grants.sql', start: '-- After this, an anon query', lines: 4 },
+          notes: [
+            { match: 'fails with 42501', text: 'בקשת REST בלי משתמש מחובר נכשלת על הרשאות עוד לפני ש-RLS נבדק. קודם, RLS היה ההגנה היחידה בין המפתח הציבורי לבין המידע.' },
+            { match: 'REVOKE ALL ON ALL TABLES', text: 'הפקודה עצמה: מוריד מה-role ‏`anon` כל הרשאה על כל הטבלאות. `authenticated` (משתמש מחובר) ממשיך לעבוד דרך RLS.' },
+          ],
+        },
+        {
+          kind: 'quiz',
+          question: 'איזו מתודת HTTP יוצאת מ-`supabase.from(\'Trade\').update({ tags }).eq(\'id\', id)`?',
+          options: ['`GET`', '`POST`', '`PUT`', '`PATCH`'],
+          answer: 3,
+          explanation: '`.update()` שולח `PATCH` — שינוי חלקי של השורות שעוברות את הפילטר (`id=eq.<id>`). `PUT` הוא החלפה מלאה, ו-PostgREST משתמש בו רק במקרים מיוחדים.',
+        },
+        {
+          kind: 'quiz',
+          question: 'למה `reverse_position` רץ דרך `.rpc()` ולא כשתי קריאות — `.update()` לסגירה ואז `.insert()` לפתיחה?',
+          options: [
+            'כי `.insert()` לא עובד עם service-role',
+            'כי כל קריאת REST היא בקשה וטרנזקציה נפרדת — אם השנייה נכשלת, הראשונה כבר נשמרה',
+            'כי RPC מהיר יותר בכל מקרה',
+            'כי PostgREST לא תומך ב-`PATCH`',
+          ],
+          answer: 1,
+          explanation: 'שתי בקשות HTTP הן שתי טרנזקציות. כשל באמצע היה משאיר פוזיציה סגורה בלי ההפוכה שלה. פונקציית Postgres מבצעת את שתיהן ב-transaction אחת — הכל או כלום.',
+        },
+        {
+          kind: 'exercise',
+          prompt: 'תרגמו לבקשת HTTP גולמית (URL + headers) את השאילתה: `supabase.from(\'Trade\').select(\'ticker, realizedPnl\').eq(\'status\', \'Closed\').order(\'closedAt\', { ascending: false }).limit(5)` — חמשת הטריידים האחרונים שנסגרו.',
+          hint: 'כל פילטר הוא `column=op.value`, המיון הוא `order=column.desc`, וה-headers זהים לדוגמה של התגים.',
+          solution: {
+            lang: 'bash',
+            code: `curl "https://<project-ref>.supabase.co/rest/v1/Trade?select=ticker,realizedPnl&status=eq.Closed&order=closedAt.desc&limit=5" \\
+  -H "apikey: <anon-key>" \\
+  -H "Authorization: Bearer <user-access-token>"
+
+# RLS still scopes the rows to the signed-in user, even without a userId filter.`,
+          },
+        },
+      ],
+    },
+
+    // -----------------------------------------------------------------------
+    // 3. Calling someone else's API
     // -----------------------------------------------------------------------
     {
       slug: 'api-calling-external',
@@ -376,7 +539,7 @@ export async function getEurToUsdRate(): Promise<number> {
     },
 
     // -----------------------------------------------------------------------
-    // 3. A messy real-world integration: IBKR
+    // 4. A messy real-world integration: IBKR
     // -----------------------------------------------------------------------
     {
       slug: 'api-ibkr-integration',
@@ -585,7 +748,7 @@ export function fetchIbritRange(token: string, queryId: string, from: string, to
     },
 
     // -----------------------------------------------------------------------
-    // 4. Webhooks: Lemon Squeezy calls us
+    // 5. Webhooks: Lemon Squeezy calls us
     // -----------------------------------------------------------------------
     {
       slug: 'api-webhooks',
@@ -738,7 +901,7 @@ export function verifySignature(rawBody: string, header: string | null, secret: 
     },
 
     // -----------------------------------------------------------------------
-    // 5. Cron, secrets and base URLs
+    // 6. Cron, secrets and base URLs
     // -----------------------------------------------------------------------
     {
       slug: 'api-cron-and-secrets',
