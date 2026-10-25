@@ -45,6 +45,11 @@ export function initPostHog(): void {
 }
 
 export type FunnelEvent =
+  // Email signup: `signup_submitted` fires when the user submits step 1 (before the Supabase
+  // call), `signup_failed` when any step rejects — `signup_started` only fires after the
+  // account was created, so submitted vs started is the step-1 drop-off.
+  | 'signup_submitted'
+  | 'signup_failed'
   | 'signup_started'
   | 'email_confirmed'
   | 'profile_completed'

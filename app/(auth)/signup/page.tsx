@@ -180,6 +180,7 @@ export default function SignupPage() {
 
   async function onStep1Submit(values: Step1Fields) {
     setStep1Error(null)
+    trackEvent('signup_submitted', { method: 'email' })
     const { createClient } = await import('@/lib/supabase/client')
     const supabase = createClient()
 
@@ -191,12 +192,16 @@ export default function SignupPage() {
     })
 
     if (error) {
-      if (error.message.toLowerCase().includes('already registered') ||
-          error.message.toLowerCase().includes('already exists')) {
-        setStep1Error('כתובת מייל כבר קיימת במערכת')
-      } else {
-        setStep1Error(error.message)
-      }
+      const alreadyExists =
+        error.message.toLowerCase().includes('already registered') ||
+        error.message.toLowerCase().includes('already exists')
+      // Reason is a fixed bucket, not error.message, so the property stays low-cardinality.
+      trackEvent('signup_failed', {
+        step: 'account',
+        reason: alreadyExists ? 'email_exists' : 'auth_error',
+        status: error.status,
+      })
+      setStep1Error(alreadyExists ? 'כתובת מייל כבר קיימת במערכת' : error.message)
       return
     }
 
@@ -300,6 +305,7 @@ export default function SignupPage() {
       })
       const json = await res.json()
       if (!res.ok) {
+        trackEvent('signup_failed', { step: 'profile', reason: 'api_error', status: res.status })
         setSubmitError(json.error ?? 'שגיאה בשמירת הפרטים')
         return
       }
@@ -307,6 +313,7 @@ export default function SignupPage() {
       router.push('/research')
       router.refresh()
     } catch {
+      trackEvent('signup_failed', { step: 'profile', reason: 'network' })
       setSubmitError('שגיאת רשת, אנא נסה שוב')
     } finally {
       setSubmitting(false)
