@@ -1,0 +1,83 @@
+{
+  "meta": {
+    "test_mode": true,
+    "event_name": "subscription_created",
+    "webhook_id": "9f1c0b2a-6d4e-4a1b-9c3d-8e7f6a5b4c3d",
+    "custom_data": {
+      "user_id": "a0000000-0000-4000-8000-000000000027"
+    }
+  },
+  "data": {
+    "type": "subscriptions",
+    "id": "847291",
+    "attributes": {
+      "store_id": 18432,
+      "customer_id": 5829104,
+      "order_id": 3928104,
+      "order_item_id": 3901842,
+      "product_id": 102944,
+      "variant_id": 158203,
+      "product_name": "Trade Analyst Pro",
+      "variant_name": "Monthly",
+      "user_name": "Noa Levi",
+      "user_email": "noa.levi@example.com",
+      "status": "active",
+      "status_formatted": "Active",
+      "card_brand": "visa",
+      "card_last_four": "4242",
+      "payment_processor": "stripe",
+      "pause": null,
+      "cancelled": false,
+      "trial_ends_at": null,
+      "billing_anchor": 20,
+      "first_subscription_item": {
+        "id": 918273,
+        "subscription_id": 847291,
+        "price_id": 220184,
+        "quantity": 1,
+        "is_usage_based": false,
+        "created_at": "2026-10-20T10:00:00.000000Z",
+        "updated_at": "2026-10-20T10:00:00.000000Z"
+      },
+      "urls": {
+        "update_payment_method": "https://tradeanalyst.lemonsqueezy.com/subscription/847291/payment-details?expires=1790000000&signature=31cf3c83983a03a6cf92e4ec3b469fc044eace0a13183dcb1d7bc0da3bad6f31",
+        "customer_portal": "https://tradeanalyst.lemonsqueezy.com/billing?expires=1790000000&signature=82ae290ceac8edd4190c82825dd73a8743346d894a8ddbc4898b97eb96d105a5",
+        "customer_portal_update_subscription": "https://tradeanalyst.lemonsqueezy.com/billing/847291/update?expires=1790000000&signature=e4fabc7ee703664d644bba9e79a9cd3dd00622308b335f3c166787f0b18999f2"
+      },
+      "renews_at": "2026-11-20T10:00:00.000000Z",
+      "ends_at": null,
+      "created_at": "2026-10-20T10:00:00.000000Z",
+      "updated_at": "2026-10-20T10:00:00.000000Z",
+      "test_mode": true
+    },
+    "relationships": {
+      "store": {
+        "links": {
+          "related": "https://api.lemonsqueezy.com/v1/subscriptions/847291/store",
+          "self": "https://api.lemonsqueezy.com/v1/subscriptions/847291/relationships/store"
+        }
+      },
+      "customer": {
+        "links": {
+          "related": "https://api.lemonsqueezy.com/v1/subscriptions/847291/customer",
+          "self": "https://api.lemonsqueezy.com/v1/subscriptions/847291/relationships/customer"
+        }
+      },
+      "product": {
+        "links": {
+          "related": "https://api.lemonsqueezy.com/v1/subscriptions/847291/product",
+          "self": "https://api.lemonsqueezy.com/v1/subscriptions/847291/relationships/product"
+        }
+      },
+      "subscription-invoices": {
+        "links": {
+          "related": "https://api.lemonsqueezy.com/v1/subscriptions/847291/subscription-invoices",
+          "self": "https://api.lemonsqueezy.com/v1/subscriptions/847291/relationships/subscription-invoices"
+        }
+      }
+    },
+    "links": {
+      "self": "https://api.lemonsqueezy.com/v1/subscriptions/847291"
+    }
+  }
+}
