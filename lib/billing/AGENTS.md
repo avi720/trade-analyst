@@ -35,6 +35,11 @@ shape it — don't "fix" either:
 - Always ack what should not be retried (unknown events, non-UUID ids, orphaned users);
   return 500 only when a retry can succeed. An orphaned subscription is logged with
   `userId: null` (FK to `User`) and the id in metadata.
+- `subscription_paused` / `subscription_unpaused` are handled — they are Subscription
+  objects. `subscription_payment_*` are not: those payloads are invoices, and
+  `attributes.status` (`paid` / `pending`) is not a subscription status. A failed or
+  recovered renewal reaches the user as `subscription_updated` (`past_due` / `active`).
+  Do not add the invoice events to `HANDLED_EVENTS` without a separate code path.
 - With billing env unset, the webhook acks with `billing not configured`.
 - The admin Pro/Free toggle writes a fake but coherent `subscriptionStatus` and never touches the
   `lemonsqueezy*Id` columns, so a real webhook can still overwrite it cleanly.

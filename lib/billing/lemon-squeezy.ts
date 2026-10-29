@@ -112,6 +112,13 @@ export const HANDLED_EVENTS = [
   'subscription_cancelled',
   'subscription_resumed',
   'subscription_expired',
+  // Pause and unpause send a Subscription object (status `paused` / `active`).
+  // Invoice events (`subscription_payment_*`) are intentionally absent: their
+  // `attributes.status` is an invoice status (`paid`, `pending`), and running
+  // that through grantsPro would clear Pro and overwrite subscriptionStatus.
+  // A failed or recovered charge arrives separately as subscription_updated.
+  'subscription_paused',
+  'subscription_unpaused',
 ] as const
 
 export type HandledEvent = (typeof HANDLED_EVENTS)[number]
@@ -192,9 +199,10 @@ export async function cancelSubscription(
 // which continues delivery without billing). Void matches the owner's intent
 // — paused users become Free until they resume.
 //
-// The webhook fires `subscription_paused` on pause and `subscription_resumed`
-// on resume; those flows already downgrade / upgrade `subscriptionTier`
-// correctly via `isActiveStatus`.
+// The webhook fires `subscription_paused` on pause and `subscription_unpaused`
+// on resume (resume-after-cancel is `subscription_resumed`). Both carry a
+// Subscription object, so the webhook downgrades to Free while paused and
+// restores Pro on unpause via `grantsPro`.
 
 export type LemonSqueezyMutateResult = LemonSqueezyCancelResult
 
