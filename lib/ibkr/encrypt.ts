@@ -17,7 +17,7 @@ function getKey(): Buffer {
 // Format: "v1:iv:authTag:ciphertext" — all hex-encoded, colon-separated.
 // Legacy 3-part values produced before the v1 prefix was introduced are
 // accepted by decryptToken() for backward-compatible reads; the next time a
-// caller re-encrypts the token (e.g., user rotates the IBKR Flex token) the
+// caller re-encrypts the token (e.g., user rotates the IBKR token) the
 // new value is written with the v1 prefix.
 export function encryptToken(plain: string): string {
   const key = getKey();

@@ -45,8 +45,7 @@ Step 4 properties:
 
 `first_trade_created.source` is the path that inserted the row: `manual` (open
 form, closed form, and `POST /api/trades/manual`), `excel` (template confirm
-and the non-preview import), `ai_import` (confirm), `ibkr` (IBRIT sync, Flex
-sync, and the legacy Flex connect's first sync). Closed-form entry is
+and the non-preview import), `ai_import` (confirm), `ibkr` (IBRIT sync). Closed-form entry is
 `manual`, not a separate source.
 
 Breakdowns:

@@ -7,7 +7,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { matchExecution } from "@/lib/trade/fifo";
-import { validateStk } from "@/lib/ibkr/parse-flex-xml";
 import type { Database, TablesInsert, Json } from "@/lib/db/types";
 import type {
   NormalizedExecution,
@@ -234,7 +233,7 @@ async function processOneExecution(
   }
 
   // 2. STK validation
-  if (!validateStk(exec)) {
+  if (exec.assetClass !== "STK") {
     return { brokerExecId: exec.brokerExecId, status: "REJECTED_NON_STOCK" };
   }
 

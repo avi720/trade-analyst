@@ -25,7 +25,7 @@ IBKR, מהזנה ידנית או מייבוא Excel, עוברים התאמת FIF
 - **Next.js 16** (App Router) + **React 19** + TypeScript, Tailwind CSS, Recharts
 - **Supabase** — Postgres עם RLS, Auth (אימייל + Google), Storage. גישה דרך Supabase JS בלבד, בלי ORM
 - **Gemini 2.5** (`@google/genai`) — הצ'אט וייבוא ה-AI
-- **IBKR Flex Web Service** — סנכרון ביצועים; ה-token מוצפן AES-256-GCM
+- **IBKR IBRIT Web Service** — סנכרון ביצועים; ה-token מוצפן AES-256-GCM
 - **Lemon Squeezy** — מנויים · **Sentry** — שגיאות · **PostHog** — אנליטיקה (רק אחרי הסכמה לעוגיות)
 - **Vercel** לאפליקציה, **GitHub Actions** לכל המשימות המתוזמנות
 - **Vitest** לבדיקות

@@ -99,7 +99,7 @@ Admin-wide read access uses additive `admins_select_all_*` policies keyed off th
 - `Order.brokerOrderId` — NOT unique. Groups partial fills.
 - `BrokerEvent` — raw XML audit log of every IBKR fetch. 90-day retention via the `pg_cron`
   job `purge-broker-events`.
-- `BrokerConnection.flexTokenEncrypted` — AES-256-GCM. Never returned in API responses.
+- `BrokerConnection.flexTokenEncrypted` — holds the IBRIT token (name predates IBRIT). AES-256-GCM. Never returned in API responses.
 - `User.settings` (Json) — display preferences (currency, dateFormat, numberFormat, timezone)
   live under `settings.display`. There are **no** dedicated columns for these. API:
   `GET/PATCH /api/profile`.

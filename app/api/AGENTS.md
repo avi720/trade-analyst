@@ -36,7 +36,7 @@ blocking users when the RPC errors. Log rejections with `logAuditEvent({ eventTy
 
 ## Work that outlives the response
 
-Use `waitUntil()` from `@vercel/functions` (see `ibkr/connect`, `admin/ibkr/[connectionId]/sync`
+Use `waitUntil()` from `@vercel/functions` (see `ibkr/ibrit/connect`, `admin/ibkr/[connectionId]/sync`
 — the latter returns 202 and the UI polls). A bare unawaited promise or `setImmediate` gets killed when the response is sent.
 Anything that can exceed Vercel's 60s cap belongs on the GitHub-Actions worker — see the
 `cron-and-workers` skill.

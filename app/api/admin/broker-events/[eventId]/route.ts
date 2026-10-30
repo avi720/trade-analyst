@@ -9,7 +9,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 const uuidSchema = z.string().uuid()
 
 // GET /api/admin/broker-events/[eventId] — full BrokerEvent payload for
-// the detail modal. Includes rawPayload (JSON blob; for IBKR_FLEX events
+// the detail modal. Includes rawPayload (JSON blob; for historical IBKR_FLEX events
 // this is `{ xml: string }` capped to 10000 chars in the sync pipeline).
 // Read-only. No reprocess endpoint (feature dropped in the Phase 3 plan).
 export async function GET(

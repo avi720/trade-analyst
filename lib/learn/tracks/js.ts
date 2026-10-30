@@ -660,7 +660,7 @@ getFormatter('America/New_York') === getFormatter('America/New_York')  // true �
       blocks: [
         {
           kind: 'text',
-          body: `דוחות Flex של IBKR מתארים כל ביצוע עם זמן בפורמט \`dd/MM/yyyy;HH:mm:ss TimeZone\` — למשל \`23/04/2026;14:30:00 EST\`. אם נפרש את השעה לא נכון, הטרייד ייפתח בשעה הלא נכונה, ואולי ביום הלא נכון — וגרפי "רווח לפי שעה" ו"לפי יום בשבוע" בדף התחקור יהיו שגויים.
+          body: `דוחות Flex של IBKR (הדרך הישנה, שהוסרה מהאתר; הקוד שלהלן נשמר כדוגמה) תיארו כל ביצוע עם זמן בפורמט \`dd/MM/yyyy;HH:mm:ss TimeZone\` — למשל \`23/04/2026;14:30:00 EST\`. אם נפרש את השעה לא נכון, הטרייד ייפתח בשעה הלא נכונה, ואולי ביום הלא נכון — וגרפי "רווח לפי שעה" ו"לפי יום בשבוע" בדף התחקור יהיו שגויים.
 
 הפתרון הנאיבי — \`new Date(raw)\` — לא עובד. לפני שנראה את הקוד, כדאי להבין למה:`,
         },
@@ -679,28 +679,62 @@ new Date(Date.UTC(2026, 3, 23, 14, 30))  // 14:30 UTC — same instant on every 
         {
           kind: 'callout',
           tone: 'warn',
-          body: 'השרת ב-Vercel רץ ב-UTC, והדפדפן שלכם רץ בשעון ישראל. כל פירוש שתלוי ב"אזור הזמן המקומי" ייתן **רגע שונה** בשרת ובדפדפן עבור אותה מחרוזת. לכן הקובץ `lib/ibkr/parse-date.ts` מפרק את המחרוזת ידנית ובונה את הזמן רק עם `Date.UTC`, שלא תלוי במכונה.',
+          body: 'השרת ב-Vercel רץ ב-UTC, והדפדפן שלכם רץ בשעון ישראל. כל פירוש שתלוי ב"אזור הזמן המקומי" ייתן **רגע שונה** בשרת ובדפדפן עבור אותה מחרוזת. לכן הקוד מפרק את המחרוזת ידנית ובונה את הזמן רק עם `Date.UTC`, שלא תלוי במכונה.',
         },
         {
-          kind: 'source',
+          kind: 'snippet',
+          lang: 'ts',
           title: 'שלב 1: חיתוך המחרוזת לחלקים',
-          ref: { file: 'lib/ibkr/parse-date.ts', start: "const semicolonIdx = raw.indexOf(';')", end: 'const tzAbbrev' },
-          notes: [
-            { match: "raw.indexOf(';')", text: '`indexOf` מחזיר את המיקום של התו הראשון שמתאים, או `-1` אם אין כזה. בלי `;` — המחרוזת לא בפורמט, ומחזירים `null`.' },
-            { match: 'raw.slice(0, semicolonIdx).trim()', text: '`slice(start, end)` חותך מ-`start` ועד `end` **לא כולל**. בלי `end` — עד הסוף. `trim()` מסיר רווחים בקצוות.' },
-            { match: "timeWithTz.lastIndexOf(' ')", text: '`lastIndexOf` מחפש מהסוף. בשעה עצמה אין רווחים, אז הרווח האחרון הוא זה שלפני קיצור אזור הזמן.' },
-            { match: '.toUpperCase()', text: 'מנרמלים `est` ל-`EST` כדי שהחיפוש בטבלת ההפרשים `TZ_OFFSETS_MINUTES[tzAbbrev]` יצליח. קיצור לא מוכר מחזיר `undefined` — והפונקציה מחזירה `null`.' },
-          ],
+          code: `const semicolonIdx = raw.indexOf(';')
+  if (semicolonIdx === -1) {
+    console.error('[parseIbkrDate] missing semicolon separator:', raw)
+    return null
+  }
+
+  const datePart = raw.slice(0, semicolonIdx).trim()
+  const timeWithTz = raw.slice(semicolonIdx + 1).trim()
+
+  // Split "HH:mm:ss TZ" on last space to isolate timezone abbreviation
+  const lastSpace = timeWithTz.lastIndexOf(' ')
+  if (lastSpace === -1) {
+    console.error('[parseIbkrDate] missing timezone in time part:', raw)
+    return null
+  }
+
+  const timePart = timeWithTz.slice(0, lastSpace).trim()
+  const tzAbbrev = timeWithTz.slice(lastSpace + 1).trim().toUpperCase()`,
         },
         {
-          kind: 'source',
+          kind: 'text',
+          body: "- `indexOf` מחזיר את המיקום של התו הראשון שמתאים, או `-1` אם אין כזה. בלי `;` — המחרוזת לא בפורמט, ומחזירים `null`.\n- `slice(start, end)` חותך מ-`start` ועד `end` **לא כולל**. בלי `end` — עד הסוף. `trim()` מסיר רווחים בקצוות.\n- `lastIndexOf` מחפש מהסוף. בשעה עצמה אין רווחים, אז הרווח האחרון הוא זה שלפני קיצור אזור הזמן.\n- מנרמלים `est` ל-`EST` כדי שהחיפוש בטבלת ההפרשים `TZ_OFFSETS_MINUTES[tzAbbrev]` יצליח. קיצור לא מוכר מחזיר `undefined` — והפונקציה מחזירה `null`.",
+        },
+        {
+          kind: 'snippet',
+          lang: 'ts',
           title: 'שלב 2: מספרים מתוך מחרוזות',
-          ref: { file: 'lib/ibkr/parse-date.ts', start: '// Parse date: dd/MM/yyyy', end: 'const seconds' },
-          notes: [
-            { match: "datePart.split('/')", text: '`split` מפרק מחרוזת למערך לפי מפריד: `\'23/04/2026\'.split(\'/\')` נותן `[\'23\', \'04\', \'2026\']` — עדיין **מחרוזות**.' },
-            { match: 'dateParts.length !== 3', text: 'בודקים שיש בדיוק שלושה חלקים לפני שניגשים ל-`dateParts[2]` — גישה למיקום שלא קיים מחזירה `undefined`.' },
-            { match: 'parseInt(dateParts[0], 10)', text: '`parseInt(str, 10)` ממיר למספר בבסיס עשרוני. הארגומנט `10` מבטל ניחושים: בלעדיו `parseInt(\'0x10\')` נותן `16`. אם אין ספרות בכלל — מתקבל `NaN`, ולכן אחר כך יש בדיקת `isNaN` לכל רכיב.' },
-          ],
+          code: `// Parse date: dd/MM/yyyy
+  const dateParts = datePart.split('/')
+  if (dateParts.length !== 3) {
+    console.error('[parseIbkrDate] invalid date format:', raw)
+    return null
+  }
+  const day   = parseInt(dateParts[0], 10)
+  const month = parseInt(dateParts[1], 10)
+  const year  = parseInt(dateParts[2], 10)
+
+  // Parse time: HH:mm:ss
+  const timeParts = timePart.split(':')
+  if (timeParts.length !== 3) {
+    console.error('[parseIbkrDate] invalid time format:', raw)
+    return null
+  }
+  const hours   = parseInt(timeParts[0], 10)
+  const minutes = parseInt(timeParts[1], 10)
+  const seconds = parseInt(timeParts[2], 10)`,
+        },
+        {
+          kind: 'text',
+          body: "- `split` מפרק מחרוזת למערך לפי מפריד: `'23/04/2026'.split('/')` נותן `['23', '04', '2026']` — עדיין **מחרוזות**.\n- בודקים שיש בדיוק שלושה חלקים לפני שניגשים ל-`dateParts[2]` — גישה למיקום שלא קיים מחזירה `undefined`.\n- `parseInt(str, 10)` ממיר למספר בבסיס עשרוני. הארגומנט `10` מבטל ניחושים: בלעדיו `parseInt('0x10')` נותן `16`. אם אין ספרות בכלל — מתקבל `NaN`, ולכן אחר כך יש בדיקת `isNaN` לכל רכיב.",
         },
         {
           kind: 'callout',
@@ -715,14 +749,20 @@ new Date(Date.UTC(2026, 3, 23, 14, 30))  // 14:30 UTC — same instant on every 
           explanation: '`parseInt` קורא ספרות מההתחלה ועוצר בתו הראשון שאינו ספרה. `Number` דורש שכל המחרוזת תהיה מספר תקין, אחרת `NaN`. בגלל ההתנהגות הסלחנית של `parseInt`, הפורמט עצמו נבדק קודם עם `split` ו-`length`.',
         },
         {
-          kind: 'source',
+          kind: 'snippet',
+          lang: 'ts',
           title: 'שלב 3: מרכיבים את הרגע ב-UTC',
-          ref: { file: 'lib/ibkr/parse-date.ts', start: '// Date.UTC() treats all arguments as UTC', end: 'return new Date(utcMs)' },
-          notes: [
-            { match: 'Date.UTC(year, month - 1', text: '`Date.UTC` מחזיר **מספר** — מילישניות מאז 1970 — כאילו השעה הייתה ב-UTC. החודשים ב-JS מתחילים מ-0 (ינואר = 0), לכן `month - 1`.' },
-            { match: 'offsetMinutes * 60_000', text: 'ההפרש בדקות כפול 60,000 = מילישניות. `60_000` הוא פשוט `60000` — הקו התחתון רק לקריאות. EST הוא `-300`, אז מחסירים מינוס חמש שעות = **מוסיפים** חמש שעות.' },
-            { match: 'return new Date(utcMs)', text: '`new Date(number)` הוא הבנאי הבטוח: מספר מילישניות הוא רגע חד-משמעי, בלי שום פירוש של מחרוזת או אזור זמן.' },
-          ],
+          code: `// Date.UTC() treats all arguments as UTC — gives us the "wall clock as if UTC" timestamp.
+  // Subtracting the timezone offset converts wall-clock-in-TZ → true UTC.
+  // Example: 14:30:00 EST (offset=-300): wallClockUTC=14:30Z, utcMs=14:30Z+5h=19:30Z ✓
+  const wallClockUtcMs = Date.UTC(year, month - 1, day, hours, minutes, seconds)
+  const utcMs = wallClockUtcMs - offsetMinutes * 60_000
+
+  return new Date(utcMs)`,
+        },
+        {
+          kind: 'text',
+          body: "- `Date.UTC` מחזיר **מספר** — מילישניות מאז 1970 — כאילו השעה הייתה ב-UTC. החודשים ב-JS מתחילים מ-0 (ינואר = 0), לכן `month - 1`.\n- ההפרש בדקות כפול 60,000 = מילישניות. `60_000` הוא פשוט `60000` — הקו התחתון רק לקריאות. EST הוא `-300`, אז מחסירים מינוס חמש שעות = **מוסיפים** חמש שעות.\n- `new Date(number)` הוא הבנאי הבטוח: מספר מילישניות הוא רגע חד-משמעי, בלי שום פירוש של מחרוזת או אזור זמן.",
         },
         {
           kind: 'quiz',

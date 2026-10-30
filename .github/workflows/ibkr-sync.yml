@@ -20,5 +20,5 @@ jobs:
           # response, so that case fails the run too — by design.
           expect: '.ok == true'
           # Above the route's 300s maxDuration: an IBRIT first sync (history
-          # backfill) can run long, and Flex polls IBKR up to ~40s per connection.
+          # backfill) can run long.
           max-time: '320'

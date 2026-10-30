@@ -10,7 +10,7 @@ For background on the architecture, read [`AGENTS.md`](../AGENTS.md). For securi
 
 **When:** suspected key compromise, scheduled annual rotation, or post-incident hardening.
 
-**Blast radius:** every IBKR Flex token in `BrokerConnection.flexTokenEncrypted` is encrypted under the current key. Rotation requires decrypting with the old key and re-encrypting with the new one — atomic at the row level, not at the table level.
+**Blast radius:** every IBKR token in `BrokerConnection.flexTokenEncrypted` is encrypted under the current key. Rotation requires decrypting with the old key and re-encrypting with the new one — atomic at the row level, not at the table level.
 
 **Steps:**
 1. Generate a new 32-byte hex key: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
@@ -18,7 +18,7 @@ For background on the architecture, read [`AGENTS.md`](../AGENTS.md). For securi
 3. Write a one-off migration script under `scripts/rotate-flex-key.ts` that loops over `BrokerConnection`, decrypts with `process.env.FLEX_TOKEN_ENCRYPTION_KEY`, re-encrypts with `process.env.FLEX_TOKEN_ENCRYPTION_KEY_NEW`, updates the row.
 4. Run locally against production via `npx tsx scripts/rotate-flex-key.ts` with both env vars set from a `.env.rotate` file. The `v1:` format prefix in `lib/ibkr/encrypt.ts` lets you verify each row was re-encrypted.
 5. In Vercel, set `FLEX_TOKEN_ENCRYPTION_KEY` to the new value, remove `FLEX_TOKEN_ENCRYPTION_KEY_NEW`, redeploy.
-6. Verify: manually trigger IBKR sync for one user (runbook 2) and confirm the Flex Web Service call succeeds with the re-encrypted token.
+6. Verify: manually trigger IBKR sync for one user (runbook 2) and confirm the IBRIT Web Service call succeeds with the re-encrypted token.
 
 **Rollback:** if step 4 fails partway, the rows that were already re-encrypted will fail to decrypt with the OLD key. The script must either complete or be re-runnable with retry logic. Re-running with both env vars set is safe — the script can be made idempotent by checking the `v1:` ciphertext format against a marker (e.g., a temporary `keyVersion` column).
 
@@ -49,7 +49,7 @@ For background on the architecture, read [`AGENTS.md`](../AGENTS.md). For securi
 1. Supabase Dashboard → Authentication → Users → search by email.
 2. Click the user → "Sign out" button. This invalidates all active refresh tokens for that user.
 3. If suspected password breach: also click "Reset password" — sends a reset email. Document the action in an internal note.
-4. If the user reported a stolen Flex token: in Supabase → Table editor → `BrokerConnection`, delete the row for that `userId`. They will need to reconnect IBKR with a fresh token.
+4. If the user reported a stolen IBKR token: in Supabase → Table editor → `BrokerConnection`, delete the row for that `userId`. They will need to reconnect IBKR with a fresh token.
 
 ---
 
@@ -171,4 +171,4 @@ permission rules were deleted at the same time.
 - **Supabase support:** dashboard chat (Pro plan)
 - **Vercel support:** dashboard chat (Pro plan)
 - **Lemon Squeezy support:** support@lemonsqueezy.com
-- **IBKR Flex issues:** verify via the customer-portal Flex Web Service section first; vendor support is slow (~48h).
+- **IBKR issues:** verify via the customer-portal IBRIT Web Service settings first; vendor support is slow (~48h).

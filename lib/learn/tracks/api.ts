@@ -670,13 +670,13 @@ export async function getEurToUsdRate(): Promise<number> {
 
 **פענוח**: הקבצים הם CSV מופרד בפסיקים. \`parse-ibrit-csv.ts\` מפצל כל שורה עם \`splitCsvLine\` — שדה עטוף במירכאות רק כשהוא מכיל פסיק, ו-\`""\` בתוכו הוא מירכאה אחת. אחר כך כל שורה הופכת ל-\`NormalizedExecution\`, ושורות של ביטול או תיקון (\`CA\`/\`CO\`) לא מיושמות אוטומטית אלא מסומנות לבדיקה ידנית.
 
-**Flex** — הדרך הישנה, שעדיין מסנכרנת חיבורים קיימים ו**מתוכננת להסרה**: שתי בקשות במקום אחת, ו-XML במקום CSV:`,
+**Flex** — הדרך הישנה, ש**הוסרה** מהאתר: שתי בקשות במקום אחת, ו-XML במקום CSV:`,
         },
         {
           kind: 'compare',
           left: {
             lang: 'ts',
-            title: 'Flex (flex-client.ts) — שני שלבים',
+            title: 'Flex (הוסר) — שני שלבים',
             code: `// Step 1: ask IBKR to generate a report
 //   GET .../SendRequest?t=TOKEN&q=QUERY&v=3
 //   -> XML with ReferenceCode + Url

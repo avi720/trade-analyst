@@ -10,8 +10,7 @@ inside Postgres. There are no Vercel Cron entries.
 
 ## Backfill
 
-There is no separate backfill endpoint. `POST /api/ibkr/ibrit/connect` (IBRIT; the legacy Flex
-one is `POST /api/ibkr/connect`) saves the connection and fires the first sync through
+There is no separate backfill endpoint. `POST /api/ibkr/ibrit/connect` saves the connection and fires the first sync through
 `waitUntil()` from `@vercel/functions` — this replaced `setImmediate`, which Vercel killed as
 soon as the response was sent. The IBRIT first sync loads up to 10 years of history in
 year-long windows and can take minutes, hence `maxDuration = 300` on that route, the cron
@@ -20,12 +19,8 @@ route and the admin sync route.
 ## IBKR sync
 
 GitHub Actions fires at **13:00 & 20:00 UTC** ([.github/workflows/ibkr-sync.yml](../../../.github/workflows/ibkr-sync.yml)).
-Twice a day because only the **Activity** Flex Query is used and it updates once per
-end-of-day (Trade Confirmations was dropped; the `flexQueryIdTrades` column was dropped).
-
-Step 2 polls every 10s up to **4 attempts** (~40s). IBKR typically generates the statement
-within 1–2 attempts. If all 4 fail, `IbkrTransientError` is thrown → `lastSyncAt` is **not**
-updated → the next cron run retries automatically. Don't add retry logic on top of this; the
+On a transient IBRIT error `IbkrTransientError` is thrown → `lastSyncAt` is **not** updated →
+the next cron run retries automatically. Don't add sync-level retries on top of this; the
 non-update *is* the retry mechanism.
 
 The pipeline itself lives in [lib/ibkr/sync-pipeline.ts](../../../lib/ibkr/sync-pipeline.ts):
