@@ -160,7 +160,7 @@ export async function syncIbritConnection(admin: Admin, conn: ConnectionRow): Pr
     executions.sort((a, b) => a.executedAt.getTime() - b.executedAt.getTime());
     executionCount = executions.length;
 
-    const results = await processExecutions(executions, conn.userId);
+    const results = await processExecutions(executions, conn.userId, { firstTradeSource: 'ibkr' });
     const failed = results.filter((r) => r.status === "FAILED");
     failedExecutions = failed.length;
 

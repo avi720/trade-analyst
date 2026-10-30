@@ -84,7 +84,7 @@ async function syncFlexConnection(
       `[sync-pipeline] user=${redactUserId(conn.userId)} parseActivityXml: ${executions} executions`,
     )
 
-    const results = await processExecutions(parsed, conn.userId)
+    const results = await processExecutions(parsed, conn.userId, { firstTradeSource: 'ibkr' })
 
     const failed = results.filter(r => r.status === 'FAILED')
     failedExecutions = failed.length

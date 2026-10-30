@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import posthog from 'posthog-js'
 import { identifyUser } from '@/lib/analytics/posthog'
+import { syncAnalyticsConsent } from '@/lib/analytics/sync-consent'
 import { useConsent } from '@/components/consent/consent-provider'
 
 /**
@@ -21,20 +22,28 @@ import { useConsent } from '@/components/consent/consent-provider'
  * only true after ConsentProvider has initialised PostHog on opt-in.
  */
 export function AnalyticsIdentity() {
-  const { analytics } = useConsent()
+  const { analytics, decided } = useConsent()
 
   useEffect(() => {
-    if (!analytics) return
+    if (!decided) return
 
     let active = true
+    // One settings write per consent change, not per token refresh.
+    let consentSynced = false
 
     // Identify only when the distinct-id has actually drifted from the user id, so repeat
     // renders and token refreshes don't emit redundant $identify events.
-    const sync = (userId: string | undefined) => {
-      if (!active || !userId) return
+    const syncIdentity = (userId: string | undefined) => {
+      if (!active || !analytics || !userId) return
       if (!posthog.__loaded) return
       if (posthog.get_distinct_id() === userId) return
       identifyUser(userId)
+    }
+
+    const syncConsent = (userId: string | undefined) => {
+      if (!active || !userId || consentSynced) return
+      consentSynced = true
+      syncAnalyticsConsent(analytics)
     }
 
     const run = async () => {
@@ -42,11 +51,16 @@ export function AnalyticsIdentity() {
       const supabase = createClient()
 
       const { data: { user } } = await supabase.auth.getUser()
-      sync(user?.id)
+      syncConsent(user?.id)
+      syncIdentity(user?.id)
 
-      // Catches the OAuth return, where the session lands after this effect first ran.
+      // Opt-out has nothing to subscribe for. Opt-in still catches the OAuth return,
+      // where the session lands after this effect first ran.
+      if (!analytics) return undefined
+
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        sync(session?.user?.id)
+        syncConsent(session?.user?.id)
+        syncIdentity(session?.user?.id)
       })
       return subscription
     }
@@ -57,7 +71,7 @@ export function AnalyticsIdentity() {
       active = false
       void subscriptionPromise.then((sub) => sub?.unsubscribe())
     }
-  }, [analytics])
+  }, [analytics, decided])
 
   return null
 }

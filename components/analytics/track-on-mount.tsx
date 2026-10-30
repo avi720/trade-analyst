@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { trackEvent, type FunnelEvent } from '@/lib/analytics/posthog'
+import { trackEvent, trackOncePerSession, type FunnelEvent } from '@/lib/analytics/posthog'
 
 /**
  * Fires a funnel event once when mounted. Lets a server component report an outcome it can
@@ -15,9 +15,12 @@ import { trackEvent, type FunnelEvent } from '@/lib/analytics/posthog'
 export function TrackOnMount({
   event,
   properties,
+  onceKey,
 }: {
   event: FunnelEvent
   properties?: Record<string, unknown>
+  /** When set, the event fires at most once per browser tab session. */
+  onceKey?: string
 }) {
   // Strict Mode double-invokes effects in dev; without this the event would double-count.
   const fired = useRef(false)
@@ -25,7 +28,8 @@ export function TrackOnMount({
   useEffect(() => {
     if (fired.current) return
     fired.current = true
-    trackEvent(event, properties)
+    if (onceKey) trackOncePerSession(event, onceKey, properties)
+    else trackEvent(event, properties)
     // Intentionally mount-only: this reports a one-off outcome, not a subscription.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

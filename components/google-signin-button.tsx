@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Script from 'next/script'
-import { trackEvent } from '@/lib/analytics/posthog'
+import { identifyUser, trackEvent } from '@/lib/analytics/posthog'
+import { isFreshAccount } from '@/lib/analytics/signup-method'
 
 // Google Identity Services (GIS) instead of Supabase's redirect OAuth flow. The redirect flow
 // sends Google to <ref>.supabase.co/auth/v1/callback, so Google's account chooser shows the
@@ -81,7 +82,7 @@ export function GoogleSignInButton({ next = '/research', mode = 'signin' }: Prop
           setError(null)
           setLoading(true)
           const { createClient } = await import('@/lib/supabase/client')
-          const { error } = await createClient().auth.signInWithIdToken({
+          const { data, error } = await createClient().auth.signInWithIdToken({
             provider: 'google',
             token: credential,
             nonce: rawNonce,
@@ -91,6 +92,12 @@ export function GoogleSignInButton({ next = '/research', mode = 'signin' }: Prop
             setError('שגיאה בהתחברות עם Google')
             setLoading(false)
             return
+          }
+          if (data.user?.id) identifyUser(data.user.id)
+          if (isFreshAccount(data.user?.created_at)) {
+            trackEvent('signup_started', { method: 'google' })
+          } else {
+            trackEvent('login_succeeded', { method: 'google' })
           }
           // Full navigation, not router.push: the server layout must see the new session cookie.
           window.location.assign(next)
@@ -113,7 +120,10 @@ export function GoogleSignInButton({ next = '/research', mode = 'signin' }: Prop
           logo_alignment: 'center',
           width,
           locale: 'he',
-          click_listener: () => trackEvent('google_signin_clicked', { next }),
+          click_listener: () => {
+            trackEvent('google_signin_clicked', { next })
+            if (mode === 'signup') trackEvent('signup_submitted', { method: 'google' })
+          },
         })
       })
       observer.observe(container)

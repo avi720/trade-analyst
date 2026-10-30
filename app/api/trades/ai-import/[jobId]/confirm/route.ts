@@ -56,7 +56,7 @@ export async function POST(
     )
   }
 
-  const summary = await persistManualLegs(legs, user.id)
+  const summary = await persistManualLegs(legs, user.id, 'ai_import')
 
   const importSummary = {
     processed: summary.processed,

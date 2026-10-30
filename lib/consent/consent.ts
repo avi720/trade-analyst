@@ -37,22 +37,25 @@ interface ConsentCookie {
 }
 
 /**
- * Read the consent cookie on the client. Returns DEFAULT_CONSENT (undecided)
- * when no cookie, a malformed cookie, or a stale schema version is found — a
- * version bump therefore re-prompts every user, which is the correct behaviour
- * when the set of trackers changes.
+ * Parse a consent-cookie value (already extracted from `document.cookie` or
+ * from a request cookie). Returns DEFAULT_CONSENT (undecided) when the value
+ * is missing, malformed, or a stale schema version — a version bump therefore
+ * re-prompts every user, which is the correct behaviour when the set of
+ * trackers changes.
+ *
+ * Accepts both the raw encoded cookie and the decoded JSON Next.js hands back
+ * from `cookies().get()`.
  */
-export function readConsent(): ConsentState {
-  if (typeof document === 'undefined') return DEFAULT_CONSENT
-  const raw = document.cookie
-    .split('; ')
-    .find((c) => c.startsWith(`${CONSENT_COOKIE}=`))
-    ?.split('=')
-    .slice(1)
-    .join('=')
+export function parseConsentCookie(raw: string | null | undefined): ConsentState {
   if (!raw) return DEFAULT_CONSENT
+  let decoded = raw
   try {
-    const parsed = JSON.parse(decodeURIComponent(raw)) as ConsentCookie
+    decoded = decodeURIComponent(raw)
+  } catch {
+    decoded = raw
+  }
+  try {
+    const parsed = JSON.parse(decoded) as ConsentCookie
     if (parsed.v !== CONSENT_VERSION) return DEFAULT_CONSENT
     return {
       decided: true,
@@ -62,6 +65,20 @@ export function readConsent(): ConsentState {
   } catch {
     return DEFAULT_CONSENT
   }
+}
+
+/**
+ * Read the consent cookie on the client.
+ */
+export function readConsent(): ConsentState {
+  if (typeof document === 'undefined') return DEFAULT_CONSENT
+  const raw = document.cookie
+    .split('; ')
+    .find((c) => c.startsWith(`${CONSENT_COOKIE}=`))
+    ?.split('=')
+    .slice(1)
+    .join('=')
+  return parseConsentCookie(raw)
 }
 
 /** Persist an explicit choice to the consent cookie (client-only). */

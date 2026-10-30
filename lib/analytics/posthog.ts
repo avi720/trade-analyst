@@ -2,9 +2,47 @@
 
 import posthog from 'posthog-js'
 
-const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY
-const HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com'
-const ENABLED = !!KEY && process.env.NODE_ENV === 'production'
+function posthogKey(): string | undefined {
+  return process.env.NEXT_PUBLIC_POSTHOG_KEY
+}
+
+function posthogHost(): string {
+  return process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com'
+}
+
+function analyticsEnabled(): boolean {
+  return !!posthogKey() && process.env.NODE_ENV === 'production'
+}
+
+interface QueuedEvent {
+  event: FunnelEvent
+  properties?: Record<string, unknown>
+}
+
+interface QueuedIdentify {
+  userId: string
+  traits?: Record<string, unknown>
+}
+
+// Events fired from a child effect can run before ConsentProvider's effect
+// calls initPostHog. Hold them until init, then drop them on opt-out.
+const MAX_QUEUED = 50
+const queuedEvents: QueuedEvent[] = []
+let queuedIdentify: QueuedIdentify | null = null
+
+function flushQueuedAnalytics(): void {
+  const identify = queuedIdentify
+  queuedIdentify = null
+  if (identify) posthog.identify(identify.userId, identify.traits)
+  const events = queuedEvents.splice(0, queuedEvents.length)
+  for (const item of events) posthog.capture(item.event, item.properties)
+}
+
+/** Drop anything captured before the user opted out, so a later opt-in does not replay it. */
+export function discardQueuedEvents(): void {
+  queuedEvents.length = 0
+  queuedIdentify = null
+}
 
 /**
  * Initialise PostHog. Called ONLY after the user has granted analytics consent
@@ -24,9 +62,9 @@ const ENABLED = !!KEY && process.env.NODE_ENV === 'production'
  * tracking.
  */
 export function initPostHog(): void {
-  if (typeof window === 'undefined' || !ENABLED || posthog.__loaded) return
-  posthog.init(KEY!, {
-    api_host: HOST,
+  if (typeof window === 'undefined' || !analyticsEnabled() || posthog.__loaded) return
+  posthog.init(posthogKey()!, {
+    api_host: posthogHost(),
     capture_pageview: 'history_change',
     capture_pageleave: true,
     person_profiles: 'identified_only',
@@ -42,40 +80,84 @@ export function initPostHog(): void {
     capture_dead_clicks: true,
     disable_surveys: true,
   })
+  flushQueuedAnalytics()
 }
 
 export type FunnelEvent =
+  // Signup page mount. The top of the funnel for visitors who open /signup.
+  | 'signup_viewed'
   // Email signup: `signup_submitted` fires when the user submits step 1 (before the Supabase
-  // call), `signup_failed` when any step rejects — `signup_started` only fires after the
-  // account was created, so submitted vs started is the step-1 drop-off.
+  // call) or clicks Google on /signup. `signup_failed` when any step rejects. `signup_started`
+  // fires only after the account exists, so submitted vs started is the account-creation drop.
   | 'signup_submitted'
   | 'signup_failed'
   | 'signup_started'
   | 'email_confirmed'
+  // Profile wizard finished — the signup-completed step (audit event of the same moment
+  // is `signup_completed`).
   | 'profile_completed'
+  | 'login_succeeded'
+  | 'login_failed'
+  // Empty /research state: the user has an account and no closed trades yet.
+  | 'onboarding_viewed'
+  // User committed to a trade-entry path. `source`: manual | excel | ai_import.
+  | 'import_started'
+  // IBKR connection saved. `source`: ibkr.
+  | 'broker_connected'
+  // Legacy client signal. Fires on every successful manual/excel/AI import, not only
+  // the first, and never for IBKR. The funnel conversion is the server event
+  // `first_trade_created` (not in this union — it is not sent from the browser).
   | 'first_trade_imported'
   // Google OAuth + auth-failure telemetry. Before these existed, a Google signup that lost
   // its PKCE exchange left no trace anywhere — see docs/in-progress/AUTH-HARDENING-GEO-GATE.md.
   | 'google_signin_clicked'
   | 'google_signin_failed'
   | 'oauth_callback_failed'
-  | 'login_failed'
   | 'ai_import_uploaded'
   | 'ai_import_mapped'
   | 'ai_import_confirmed'
   | 'ai_import_failed'
 
 export function trackEvent(event: FunnelEvent, properties?: Record<string, unknown>): void {
-  if (typeof window === 'undefined' || !ENABLED || !posthog.__loaded) return
+  if (typeof window === 'undefined' || !analyticsEnabled()) return
+  if (!posthog.__loaded) {
+    if (queuedEvents.length < MAX_QUEUED) queuedEvents.push({ event, properties })
+    return
+  }
   posthog.capture(event, properties)
 }
 
+/**
+ * Fire `event` at most once per browser tab session. Used for steps that a
+ * remount would otherwise double-count (email confirmed, empty-state onboarding).
+ */
+export function trackOncePerSession(
+  event: FunnelEvent,
+  storageKey: string,
+  properties?: Record<string, unknown>,
+): void {
+  if (typeof window === 'undefined') return
+  try {
+    const fullKey = `ta_evt:${storageKey}`
+    if (sessionStorage.getItem(fullKey)) return
+    sessionStorage.setItem(fullKey, '1')
+  } catch {
+    // Storage blocked — still fire. A duplicate in that browser is rarer than a miss.
+  }
+  trackEvent(event, properties)
+}
+
 export function identifyUser(userId: string, traits?: Record<string, unknown>): void {
-  if (typeof window === 'undefined' || !ENABLED || !posthog.__loaded) return
+  if (typeof window === 'undefined' || !analyticsEnabled()) return
+  if (!posthog.__loaded) {
+    queuedIdentify = { userId, traits }
+    return
+  }
   posthog.identify(userId, traits)
 }
 
 export function resetUser(): void {
-  if (typeof window === 'undefined' || !ENABLED || !posthog.__loaded) return
+  discardQueuedEvents()
+  if (typeof window === 'undefined' || !analyticsEnabled() || !posthog.__loaded) return
   posthog.reset()
 }

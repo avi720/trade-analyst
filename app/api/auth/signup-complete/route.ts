@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit, rateLimitedResponse } from '@/lib/auth/rate-limit'
 import { logAuditEvent } from '@/lib/audit/log'
+import { CONSENT_COOKIE, parseConsentCookie } from '@/lib/consent/consent'
+import { withAnalyticsOptInFromConsent } from '@/lib/analytics/analytics-opt-in'
 import { z } from 'zod'
 
 const schema = z.object({
@@ -47,7 +49,14 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   const existingSettings = (existing?.settings as Record<string, unknown>) ?? {}
-  const mergedSettings = { ...existingSettings, display }
+  // Stamp analytics opt-in from the cookie at the moment the row is written.
+  // The client mirror can run before this row exists and then no-ops.
+  const consentRaw = req.cookies.get(CONSENT_COOKIE)?.value
+  const requestConsent = consentRaw ? parseConsentCookie(consentRaw) : null
+  const mergedSettings = {
+    ...withAnalyticsOptInFromConsent(existingSettings, requestConsent),
+    display,
+  }
 
   // Mutable profile columns only. NEVER include `id` or `email` here: the
   // `authenticated` role has column-level UPDATE grants on the profile columns

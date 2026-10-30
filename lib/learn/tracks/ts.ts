@@ -221,7 +221,7 @@ if (action.type === 'CLOSE') {
           ref: { file: 'lib/ibkr/process-executions.ts', start: 'async function persistAction(', end: 'case "SCALE_IN": {' },
           notes: [
             { match: 'action: FifoAction,', text: 'הפרמטר הוא ה-union כולו — בשלב הזה TS לא יודע איזה מהחמישה הגיע, ולכן מרשה לגשת רק ל-`action.type` (השדה היחיד שקיים בכולם).' },
-            { match: '): Promise<string> {', text: 'הפונקציה מבטיחה להחזיר `string` (ה-id של הטרייד) בכל מסלול. נחזור לזה בעוד רגע — ההבטחה הזו היא מה שהופך את ה-switch לבדיקת שלמות.' },
+            { match: '): Promise<{ tradeId: string; openedNewTrade: boolean }> {', text: 'הפונקציה מבטיחה להחזיר את ה-id של הטרייד, ובנוסף האם נוצרה שורה חדשה, בכל מסלול. נחזור לזה בעוד רגע — ההבטחה הזו היא מה שהופך את ה-switch לבדיקת שלמות.' },
             { match: 'switch (action.type) {', text: 'switch על ה-discriminant. כל `case` מצמצם את `action` לווריאנט אחד.' },
             { match: 'buildTradeInsert(action.tradeCreate, userId)', text: 'כאן `action` כבר מצומצם ל-`{ type: \'OPEN\'; tradeCreate; orderCreate }`, ולכן `action.tradeCreate` מתקמפל — בלי `!` ובלי `as`.' },
           ],
@@ -249,7 +249,7 @@ if (action.type === 'CLOSE') {
         },
         {
           kind: 'text',
-          body: `**שלמות (exhaustiveness).** שימו לב של-\`persistAction\` אין \`default\` ואין \`return\` אחרי ה-switch, ובכל זאת היא מבטיחה \`Promise<string>\`. זה עובר כי TS מבין שה-switch מכסה את כל חמשת הערכים של \`action.type\`, ולכן אי אפשר להגיע לסוף הפונקציה.
+          body: `**שלמות (exhaustiveness).** שימו לב של-\`persistAction\` אין \`default\` ואין \`return\` אחרי ה-switch, ובכל זאת היא מבטיחה \`Promise<{ tradeId: string; openedNewTrade: boolean }>\`. זה עובר כי TS מבין שה-switch מכסה את כל חמשת הערכים של \`action.type\`, ולכן אי אפשר להגיע לסוף הפונקציה.
 
 עכשיו נניח שמחר מוסיפים ל-\`FifoAction\` ווריאנט שישי, \`{ type: 'SPLIT'; ... }\`. פתאום יש מסלול שבו אף \`case\` לא תופס, הפונקציה "נופלת" לסוף ומחזירה \`undefined\` — והקומפיילר מסמן את החתימה שלה:
 
