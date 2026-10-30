@@ -209,6 +209,8 @@ export function IbritConnect({ connection, syncing, onConnected }: IbritConnectP
         return;
       }
       setSaved(true);
+      const { trackEvent } = await import("@/lib/analytics/posthog");
+      trackEvent("broker_connected", { source: "ibkr" });
       setToken("");
       setQueryId("");
       setGuideToggled(false);

@@ -19,6 +19,7 @@ import { useChatContext } from '@/lib/chat/chat-context'
 import { useHydrated } from '@/lib/hooks/use-hydrated'
 import { computeResearchAggregates } from '@/lib/utils/research-aggregate'
 import { formatUsd } from '@/lib/utils/position-calc'
+import { TrackOnMount } from '@/components/analytics/track-on-mount'
 import { InfoTooltip } from '@/components/info-tooltip'
 import { METRIC_INFO } from '@/components/research-info'
 import {
@@ -519,6 +520,7 @@ export function ResearchDashboard({ trades: rawTrades }: Props) {
         {filteredTrades.length === 0 ? (
           closedTrades.length === 0 ? (
             <div className="panel p-12 text-center" role="status">
+              <TrackOnMount event="onboarding_viewed" onceKey="onboarding_viewed" />
               <h2 className="text-text-main font-sans text-xl font-semibold mb-3">
                 עוד אין כאן טריידים — בוא נתחיל
               </h2>

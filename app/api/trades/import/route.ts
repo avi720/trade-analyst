@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const results = await processExecutions(executions, user.id)
+  const results = await processExecutions(executions, user.id, { firstTradeSource: 'excel' })
 
   const processed = results.filter(r => r.status === 'PROCESSED').length
   const skipped   = results.filter(r => r.status === 'SKIPPED_DUPLICATE').length

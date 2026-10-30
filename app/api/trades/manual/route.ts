@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { processed, skipped, failed, errors: errMsgs } = await persistManualLegs(legs, user.id)
+  const { processed, skipped, failed, errors: errMsgs } = await persistManualLegs(legs, user.id, 'manual')
 
   return NextResponse.json({ processed, skipped, failed, errors: errMsgs })
 }

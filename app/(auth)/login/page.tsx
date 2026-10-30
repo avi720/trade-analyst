@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { TradeLogoIcon } from '@/components/trade-logo'
 import { GoogleSignInButton } from '@/components/google-signin-button'
-import { trackEvent } from '@/lib/analytics/posthog'
+import { identifyUser, trackEvent } from '@/lib/analytics/posthog'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -37,7 +37,7 @@ export default function LoginPage() {
     const { createClient } = await import('@/lib/supabase/client')
     const supabase = createClient()
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       setError('אימייל או סיסמה שגויים')
@@ -47,6 +47,9 @@ export default function LoginPage() {
       trackEvent('login_failed', { reason: 'invalid_credentials' })
       return
     }
+
+    if (data.user?.id) identifyUser(data.user.id)
+    trackEvent('login_succeeded', { method: 'email' })
 
     router.push('/research')
     router.refresh()

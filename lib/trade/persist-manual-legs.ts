@@ -22,6 +22,7 @@ import {
 } from '@/lib/trade/manual-entry'
 import type { TablesUpdate } from '@/lib/db/types'
 import { processExecutions } from '@/lib/ibkr/process-executions'
+import type { FirstTradeSource } from '@/lib/analytics/first-trade'
 import { recomputeActualR } from '@/lib/trade/recompute-actual-r'
 import { mergeTags } from '@/lib/constants/trade-options'
 
@@ -43,10 +44,11 @@ export interface ImportSummary {
 export async function persistManualLegs(
   legs: ManualLeg[],
   userId: string,
+  source: Extract<FirstTradeSource, 'manual' | 'excel' | 'ai_import'>,
 ): Promise<ImportSummary> {
   const { executions, errors: validationErrors } = buildExecutions(legs)
 
-  const results = await processExecutions(executions, userId)
+  const results = await processExecutions(executions, userId, { firstTradeSource: source })
 
   const admin = createAdminClient()
   const resultByExecId = new Map(results.map((r) => [r.brokerExecId, r]))

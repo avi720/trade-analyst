@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import posthog from 'posthog-js'
-import { initPostHog } from '@/lib/analytics/posthog'
+import { discardQueuedEvents, initPostHog } from '@/lib/analytics/posthog'
 import { useHydrated } from '@/lib/hooks/use-hydrated'
 import {
   DEFAULT_CONSENT,
@@ -50,16 +50,24 @@ export function ConsentProvider({ children }: { children: React.ReactNode }) {
   // revoking opts out and clears any identity/cookies PostHog set.
   useEffect(() => {
     if (typeof window === 'undefined') return
+    // The hydration render still has the undecided default. Discarding the
+    // queue then would drop events the signup page just queued, before the
+    // cookie is read. Only an explicit decision opts in or out.
+    if (!consent.decided) return
     if (consent.analytics) {
       initPostHog()
       if (posthog.__loaded) posthog.opt_in_capturing()
-    } else if (posthog.__loaded) {
-      posthog.opt_out_capturing()
-      posthog.reset()
+    } else {
+      // Drop anything queued before init so a later opt-in does not replay it.
+      discardQueuedEvents()
+      if (posthog.__loaded) {
+        posthog.opt_out_capturing()
+        posthog.reset()
+      }
     }
     // Sentry (monitoring) is gated at load in instrumentation-client.ts; a
     // monitoring change applies on the next page load, so nothing to do here.
-  }, [consent.analytics])
+  }, [consent.analytics, consent.decided])
 
   const setConsent = useCallback(
     (next: { analytics: boolean; monitoring: boolean }) => {

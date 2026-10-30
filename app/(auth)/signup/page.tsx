@@ -8,7 +8,9 @@ import { z } from 'zod'
 import Link from 'next/link'
 import { CityCombobox } from '@/components/city-combobox'
 import { GoogleSignInButton } from '@/components/google-signin-button'
-import { trackEvent, identifyUser } from '@/lib/analytics/posthog'
+import { TrackOnMount } from '@/components/analytics/track-on-mount'
+import { trackEvent, trackOncePerSession, identifyUser } from '@/lib/analytics/posthog'
+import { signupMethodFromProvider } from '@/lib/analytics/signup-method'
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
@@ -157,6 +159,10 @@ export default function SignupPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user?.email_confirmed_at) {
+        if (user.id) {
+          identifyUser(user.id)
+          trackOncePerSession('email_confirmed', `email_confirmed:${user.id}`)
+        }
         setStep(2)
       }
     }
@@ -205,12 +211,12 @@ export default function SignupPage() {
       return
     }
 
-    trackEvent('signup_started')
+    trackEvent('signup_started', { method: 'email' })
     if (data.user?.id) identifyUser(data.user.id)
 
     // Email confirmation not required — session returned immediately
-    if (data.session) {
-      trackEvent('email_confirmed', { auto: true })
+    if (data.session && data.user?.id) {
+      trackOncePerSession('email_confirmed', `email_confirmed:${data.user.id}`, { auto: true })
       setStep(2)
       return
     }
@@ -225,8 +231,10 @@ export default function SignupPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user?.email_confirmed_at) {
-        trackEvent('email_confirmed')
-        if (user.id) identifyUser(user.id)
+        if (user.id) {
+          identifyUser(user.id)
+          trackOncePerSession('email_confirmed', `email_confirmed:${user.id}`)
+        }
         setStep(2)
       } else {
         setStep1Error('המייל טרם אומת. אנא לחץ על הקישור במייל ונסה שוב.')
@@ -309,7 +317,15 @@ export default function SignupPage() {
         setSubmitError(json.error ?? 'שגיאה בשמירת הפרטים')
         return
       }
-      trackEvent('profile_completed')
+      let method: 'email' | 'google' = 'email'
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const { data: { user } } = await createClient().auth.getUser()
+        method = signupMethodFromProvider(user?.app_metadata?.provider)
+      } catch {
+        method = 'email'
+      }
+      trackEvent('profile_completed', { method })
       router.push('/research')
       router.refresh()
     } catch {
@@ -334,6 +350,7 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-bg-dark px-4 py-12">
+      <TrackOnMount event="signup_viewed" />
       <div className="panel p-8 w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-6">

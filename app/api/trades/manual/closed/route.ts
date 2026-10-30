@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Validation failed', details: errors }, { status: 422 })
   }
 
-  const results = await processExecutions(executions, user.id)
+  const results = await processExecutions(executions, user.id, { firstTradeSource: 'manual' })
 
   // Find the tradeId that was opened by the open leg (results[0]).
   const openResult = results[0]

@@ -179,6 +179,7 @@ export function TradeAiImport({ defaultTimezone }: { defaultTimezone: string }) 
     setUploadError('')
     setNotice('')
     try {
+      trackEvent('import_started', { source: 'ai_import' })
       const form = new FormData()
       form.append('file', file)
       form.append('timezone', timezone)

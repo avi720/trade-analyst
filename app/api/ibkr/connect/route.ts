@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
       }).select("id").single();
 
       const executions = parseActivityXml(xml);
-      const results = await processExecutions(executions, userId);
+      const results = await processExecutions(executions, userId, { firstTradeSource: 'ibkr' });
 
       const failed = results.filter((r) => r.status === "FAILED");
       const syncStatus = failed.length > 0 ? "ERROR" : "SUCCESS";
