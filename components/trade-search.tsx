@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { TradeDetailModal, type TradeModalMode } from './trade-detail-modal'
 import { ManualCloseModal } from './manual-close-modal'
 import { PositionChangeModal } from './position-change-modal'
@@ -130,6 +131,8 @@ export function TradeSearch({ trades, initialParams }: Props) {
   const [deleting, setDeleting] = useState<RawTrade | null>(null)
   const [deletingBusy, setDeletingBusy] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<'pro' | 'failed' | null>(null)
 
   // Optimistic-update layer (manual equivalent of React 19's useOptimistic, which
   // isn't available in React 18.3). We keep a map of pending field-patches keyed by
@@ -287,6 +290,33 @@ export function TradeSearch({ trades, initialParams }: Props) {
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   const pageItems = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
+  async function exportCsv() {
+    setExporting(true)
+    setExportError(null)
+    try {
+      const res = await fetch('/api/trades/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: sorted.map(t => t.id) }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setExportError(data?.errorCode === 'pro_required' ? 'pro' : 'failed')
+        return
+      }
+      const url = URL.createObjectURL(await res.blob())
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `trades_${new Date().toISOString().slice(0, 10)}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setExportError('failed')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const inputCls = 'bg-bg-dark border border-border rounded px-2 py-1 text-sm text-text-main placeholder-text-mute outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber focus-visible:outline-offset-2 focus:border-shade-2'
   const selectCls = inputCls + ' cursor-pointer'
 
@@ -387,7 +417,24 @@ export function TradeSearch({ trades, initialParams }: Props) {
             <span className="text-sm text-text-dim mr-auto font-mono">
               {filtered.length} / {effectiveTrades.length} טריידים
             </span>
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={exporting || sorted.length === 0}
+              className="text-sm text-text-dim hover:text-amber transition-colors px-2 py-1 border border-border rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting ? 'מייצא...' : 'ייצוא CSV'}
+            </button>
           </div>
+          {exportError === 'pro' && (
+            <p role="alert" className="text-sm text-text-dim">
+              ייצוא CSV זמין במסלול Pro בלבד.{' '}
+              <Link href="/profile?tab=billing" className="text-amber hover:underline">שדרוג</Link>
+            </p>
+          )}
+          {exportError === 'failed' && (
+            <p role="alert" className="text-sm text-text-dim">הייצוא נכשל. נסו שוב.</p>
+          )}
         </div>
 
         {/* Results table */}
