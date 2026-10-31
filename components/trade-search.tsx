@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { TradeDetailModal, type TradeModalMode } from './trade-detail-modal'
 import { ManualCloseModal } from './manual-close-modal'
 import { PositionChangeModal } from './position-change-modal'
@@ -132,7 +131,7 @@ export function TradeSearch({ trades, initialParams }: Props) {
   const [deletingBusy, setDeletingBusy] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [exporting, setExporting] = useState(false)
-  const [exportError, setExportError] = useState<'pro' | 'failed' | null>(null)
+  const [exportError, setExportError] = useState(false)
 
   // Optimistic-update layer (manual equivalent of React 19's useOptimistic, which
   // isn't available in React 18.3). We keep a map of pending field-patches keyed by
@@ -292,7 +291,7 @@ export function TradeSearch({ trades, initialParams }: Props) {
 
   async function exportCsv() {
     setExporting(true)
-    setExportError(null)
+    setExportError(false)
     try {
       const res = await fetch('/api/trades/export', {
         method: 'POST',
@@ -300,8 +299,7 @@ export function TradeSearch({ trades, initialParams }: Props) {
         body: JSON.stringify({ ids: sorted.map(t => t.id) }),
       })
       if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        setExportError(data?.errorCode === 'pro_required' ? 'pro' : 'failed')
+        setExportError(true)
         return
       }
       const url = URL.createObjectURL(await res.blob())
@@ -311,7 +309,7 @@ export function TradeSearch({ trades, initialParams }: Props) {
       link.click()
       URL.revokeObjectURL(url)
     } catch {
-      setExportError('failed')
+      setExportError(true)
     } finally {
       setExporting(false)
     }
@@ -426,13 +424,7 @@ export function TradeSearch({ trades, initialParams }: Props) {
               {exporting ? 'מייצא...' : 'ייצוא CSV'}
             </button>
           </div>
-          {exportError === 'pro' && (
-            <p role="alert" className="text-sm text-text-dim">
-              ייצוא CSV זמין במסלול Pro בלבד.{' '}
-              <Link href="/profile?tab=billing" className="text-amber hover:underline">שדרוג</Link>
-            </p>
-          )}
-          {exportError === 'failed' && (
+          {exportError && (
             <p role="alert" className="text-sm text-text-dim">הייצוא נכשל. נסו שוב.</p>
           )}
         </div>

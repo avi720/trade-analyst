@@ -44,7 +44,6 @@ const PRO_FEATURES = [
   "ייבוא Excel של עסקאות",
   "סנכרון אוטומטי מ-Interactive Brokers",
   `עד ${CHAT_DAILY_LIMIT_PRO} הודעות לחנן ביום + מצב Pro מעמיק (גישה לכל ההיסטוריה)`,
-  "ייצוא CSV של פעילות",
   "14 ימי ניסיון חינם",
 ];
 
@@ -162,7 +161,7 @@ export function TabBilling({ userTier, subscriptionStatus, subscriptionRenewsAt,
           <div className="rounded-md border border-amber/30 bg-amber-tint p-4">
             <p className="text-sm text-text-main">
               אתה במסלול <strong>Free</strong>. שדרג ל-Pro לקבלת סנכרון IBKR,
-              עד {CHAT_DAILY_LIMIT_PRO} הודעות לחנן ביום, וייצוא CSV.
+              עד {CHAT_DAILY_LIMIT_PRO} הודעות לחנן ביום.
             </p>
           </div>
 

@@ -48,6 +48,7 @@ export function PricingPlans({ promoActive }: { promoActive: boolean }) {
             'הזנה ידנית — עד 30 טריידים',
             'לוח research מלא',
             'חיפוש וסינון מתקדם',
+            'ייצוא CSV של הטריידים',
             `${CHAT_DAILY_LIMIT_FREE} הודעות לחנן ביום (מצב בסיסי)`,
           ]}
         />
@@ -65,7 +66,6 @@ export function PricingPlans({ promoActive }: { promoActive: boolean }) {
             'ייבוא Excel של עסקאות',
             'סנכרון אוטומטי מ-Interactive Brokers',
             `עד ${CHAT_DAILY_LIMIT_PRO} הודעות לחנן ביום + מצב Pro מעמיק`,
-            'ייצוא CSV מלא',
           ]}
         />
       </div>
