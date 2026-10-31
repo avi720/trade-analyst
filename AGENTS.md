@@ -46,6 +46,7 @@ directories with knowledge the code doesn't make obvious get one:
 | [app/(dashboard)/admin/](app/(dashboard)/admin/AGENTS.md) | Admin panel: gating, admin RLS, what each sub-page may and may not do |
 | [lib/chat/](lib/chat/AGENTS.md) | חנן: server-owned context, per-tier field gates, tools vs web search |
 | [lib/billing/](lib/billing/AGENTS.md) | Which subscription states grant Pro, single sources for prices and limits |
+| [lib/ibkr/](lib/ibkr/AGENTS.md) | IBRIT return codes outside IBKR's list, including the unexplained rc 1051 |
 | [lib/utils/](lib/utils/AGENTS.md) | Research metrics: the single-walk aggregator must match the reference helpers |
 | [\_\_tests\_\_/](__tests__/AGENTS.md) | Integration suites hit a real Supabase project; mocking conventions |
 | [supabase/](supabase/AGENTS.md) | What a push deploys, removing a dev-only migration, what in `config.toml` reaches production |
