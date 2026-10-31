@@ -155,7 +155,7 @@ function HowItWorks() {
     {
       n: '01',
       title: 'חבר או ייבא',
-      body: 'התחבר ל-Interactive Brokers Flex בקליק, ייבא Excel, או הזן ידנית. הכל בטוח — הטוקן שלך מוצפן ב-AES-256.',
+      body: 'התחבר ל-Interactive Brokers דרך IBRIT, ייבא Excel, או הזן ידנית. הכל בטוח — הטוקן שלך מוצפן ב-AES-256.',
     },
     {
       n: '02',
@@ -203,7 +203,7 @@ function Features() {
     {
       Icon: Link2,
       title: 'סנכרון אוטומטי מ-IBKR',
-      body: 'חיבור חד-פעמי ל-Flex Web Service, ומהיום אנחנו מושכים את העסקאות שלך אוטומטית. ללא CSV, ללא טעויות.',
+      body: 'חיבור חד-פעמי ל-IBRIT Web Service, ומהיום אנחנו מושכים את העסקאות שלך אוטומטית. ללא CSV, ללא טעויות.',
       href: '/ibkr-sync',
     },
     {
