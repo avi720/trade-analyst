@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
-import { getUserTier, isProTier, proRequiredResponse } from '@/lib/billing/tier'
 import { tradesToCsv, type CsvTrade } from '@/lib/trade/trades-csv'
 
 const schema = z.object({
@@ -15,9 +14,6 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { tier } = await getUserTier(user.id)
-  if (!isProTier(tier)) return proRequiredResponse('csv_export')
 
   let body: unknown
   try {
