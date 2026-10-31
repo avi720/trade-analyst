@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { processed, skipped, failed, errors, validationErrors } =
-    await persistManualLegs(legs, user.id)
+    await persistManualLegs(legs, user.id, 'excel')
 
   return NextResponse.json({
     processed,

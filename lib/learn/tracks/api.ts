@@ -670,13 +670,13 @@ export async function getEurToUsdRate(): Promise<number> {
 
 **פענוח**: הקבצים הם CSV מופרד בפסיקים. \`parse-ibrit-csv.ts\` מפצל כל שורה עם \`splitCsvLine\` — שדה עטוף במירכאות רק כשהוא מכיל פסיק, ו-\`""\` בתוכו הוא מירכאה אחת. אחר כך כל שורה הופכת ל-\`NormalizedExecution\`, ושורות של ביטול או תיקון (\`CA\`/\`CO\`) לא מיושמות אוטומטית אלא מסומנות לבדיקה ידנית.
 
-**Flex** — הדרך הישנה, שעדיין מסנכרנת חיבורים קיימים ו**מתוכננת להסרה**: שתי בקשות במקום אחת, ו-XML במקום CSV:`,
+**Flex** — הדרך הישנה, ש**הוסרה** מהאתר: שתי בקשות במקום אחת, ו-XML במקום CSV:`,
         },
         {
           kind: 'compare',
           left: {
             lang: 'ts',
-            title: 'Flex (flex-client.ts) — שני שלבים',
+            title: 'Flex (הוסר) — שני שלבים',
             code: `// Step 1: ask IBKR to generate a report
 //   GET .../SendRequest?t=TOKEN&q=QUERY&v=3
 //   -> XML with ReferenceCode + Url
@@ -848,7 +848,7 @@ export function fetchIbritRange(token: string, queryId: string, from: string, to
 - \`user_id\` שאינו UUID (קורה במצב בדיקה) — 200. אחרת Postgres היה זורק, ה-route היה מחזיר 500, ו-LS היו מנסים לנצח
 - UUID תקין בלי שורת \`User\` (המשתמש מחק את החשבון) — 200, ונרשם אירוע audit עם \`userId: null\`
 
-**סדר אירועים**: הקוד לא מסדר אירועים לפי זמן — כל אירוע נושא את **המצב המלא** של המנוי, וה-route כותב אותו. ברוב המקרים זה מספיק, אבל אירוע ישן שמגיע באיחור (אחרי ניסיונות חוזרים) ידרוס מצב חדש יותר. פתרון אפשרי, שלא מומש: לשמור את \`updated_at\` של המנוי ולהתעלם מאירוע ישן ממנו.
+**סדר אירועים**: כל אירוע נושא את המצב המלא של המנוי, ו-LS יכולים לשלוח אותו באיחור או בסדר הפוך. ה-route שומר את \`data.attributes.updated_at\` על \`User.lemonsqueezyUpdatedAt\` ומחיל את העדכון רק אם הגרסה **חדשה ממש** (שוויון = ישן, הראשון שהוחל מנצח). אירוע ישן מקבל 200 עם \`ignored: stale\` בלי לדרוס את ה-tier.
 
 **מי מקבל Pro?** התשובה היחידה באתר היא \`grantsPro\`:`,
         },

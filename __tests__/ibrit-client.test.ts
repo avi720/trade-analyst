@@ -75,7 +75,7 @@ describe("fetchIbritRange", () => {
 
   it("throws IbkrTransientError on generation in progress (1019) without retrying", async () => {
     const { fetchIbritRange } = await loadClient();
-    const { IbkrTransientError } = await import("../lib/ibkr/flex-client");
+    const { IbkrTransientError } = await import("../lib/ibkr/errors");
     const fetchMock = mockFetchOnce('{"msg":"busy","rc":1019}', "application/json");
     await expect(fetchIbritRange("t", "q", "20260101", "20260101")).rejects.toBeInstanceOf(IbkrTransientError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -107,7 +107,7 @@ describe("fetchIbritRange", () => {
     it("gives up with IbkrTransientError after three attempts", async () => {
       vi.useFakeTimers();
       const { fetchIbritRange } = await loadClient();
-      const { IbkrTransientError } = await import("../lib/ibkr/flex-client");
+      const { IbkrTransientError } = await import("../lib/ibkr/errors");
       const fetchMock = vi.fn().mockImplementation(async () => rateLimited());
       vi.stubGlobal("fetch", fetchMock);
       const outcome = fetchIbritRange("t", "q", "20260101", "20260101").catch((e) => e);

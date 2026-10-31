@@ -27,6 +27,8 @@ export function TradeExcelImport() {
     setParseError('')
     setPreview(null)
     setResult(null)
+    const { trackEvent } = await import('@/lib/analytics/posthog')
+    trackEvent('import_started', { source: 'excel' })
 
     // Parse client-side for preview using the import endpoint's preview mode
     const form = new FormData()

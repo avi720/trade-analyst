@@ -7,7 +7,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { matchExecution } from "@/lib/trade/fifo";
-import { validateStk } from "@/lib/ibkr/parse-flex-xml";
 import type { Database, TablesInsert, Json } from "@/lib/db/types";
 import type {
   NormalizedExecution,
@@ -16,6 +15,7 @@ import type {
   TradeCreate,
   OrderCreate,
 } from "@/types/trade";
+import type { FirstTradeSource } from "@/lib/analytics/first-trade";
 
 type Admin = SupabaseClient<Database>;
 
@@ -31,6 +31,17 @@ export interface ExecutionResult {
   error?: string;
   /** Populated for PROCESSED status — the Trade that was created or updated. */
   tradeId?: string;
+  /** True when this execution inserted a new Trade row (OPEN or REVERSAL). */
+  openedNewTrade?: boolean;
+}
+
+export interface ProcessExecutionsOptions {
+  /**
+   * When set, a server-side `first_trade_created` may fire after this batch
+   * if it inserts the user's first trade. Omit on paths that only modify an
+   * existing position (add / reduce / close).
+   */
+  firstTradeSource?: FirstTradeSource;
 }
 
 /**
@@ -133,9 +144,22 @@ function buildTradeInsert(
 // preserve the FIFO invariant. Results are returned in input order.
 export async function processExecutions(
   executions: NormalizedExecution[],
-  userId: string
+  userId: string,
+  options?: ProcessExecutionsOptions
 ): Promise<ExecutionResult[]> {
   const admin = createAdminClient();
+
+  // Count before any insert. A failure here skips analytics and still persists.
+  let priorTradeCount: number | null = null;
+  if (options?.firstTradeSource) {
+    try {
+      const { countUserTrades } = await import("@/lib/analytics/first-trade");
+      priorTradeCount = await countUserTrades(admin, userId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[process-executions] first-trade count failed:", msg);
+    }
+  }
 
   const groups = new Map<string, Array<{ exec: NormalizedExecution; idx: number }>>();
   for (let i = 0; i < executions.length; i++) {
@@ -167,6 +191,25 @@ export async function processExecutions(
   });
   await Promise.all(workers);
 
+  if (options?.firstTradeSource && priorTradeCount === 0) {
+    try {
+      const { observeFirstTrade } = await import("@/lib/analytics/first-trade");
+      const openedTradeIds = results
+        .filter((r) => r?.openedNewTrade && r.tradeId)
+        .map((r) => r.tradeId as string);
+      await observeFirstTrade({
+        admin,
+        userId,
+        source: options.firstTradeSource,
+        priorTradeCount,
+        openedTradeIds,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[process-executions] first_trade_created failed:", msg);
+    }
+  }
+
   return results;
 }
 
@@ -190,7 +233,7 @@ async function processOneExecution(
   }
 
   // 2. STK validation
-  if (!validateStk(exec)) {
+  if (exec.assetClass !== "STK") {
     return { brokerExecId: exec.brokerExecId, status: "REJECTED_NON_STOCK" };
   }
 
@@ -228,8 +271,13 @@ async function processOneExecution(
     const action: FifoAction = matchExecution(exec, openTrade);
 
     try {
-      const tradeId = await persistAction(action, userId, admin, openTrade?.totalQuantity ?? null);
-      return { brokerExecId: exec.brokerExecId, status: "PROCESSED", tradeId };
+      const persisted = await persistAction(action, userId, admin, openTrade?.totalQuantity ?? null);
+      return {
+        brokerExecId: exec.brokerExecId,
+        status: "PROCESSED",
+        tradeId: persisted.tradeId,
+        openedNewTrade: persisted.openedNewTrade,
+      };
     } catch (err) {
       // Real errors fail immediately; only concurrency conflicts retry.
       if (!(err instanceof ConflictError)) throw err;
@@ -273,7 +321,7 @@ async function persistAction(
   userId: string,
   admin: Admin,
   prevTotalQuantity: number | null
-): Promise<string> {
+): Promise<{ tradeId: string; openedNewTrade: boolean }> {
   switch (action.type) {
     case "OPEN": {
       const tradeInsert = buildTradeInsert(action.tradeCreate, userId);
@@ -295,7 +343,7 @@ async function persistAction(
       );
       const { error: orderErr } = await admin.from("Order").insert(orderInsert);
       if (orderErr) throw new Error(`Order insert failed: ${orderErr.message}`);
-      return tradeInsert.id as string;
+      return { tradeId: tradeInsert.id as string, openedNewTrade: true };
     }
 
     case "SCALE_IN": {
@@ -318,7 +366,7 @@ async function persistAction(
       const orderInsert = buildOrderInsert(action.orderCreate, action.tradeId, userId);
       const { error: orderErr } = await admin.from("Order").insert(orderInsert);
       if (orderErr) throw new Error(`Order insert (SCALE_IN) failed: ${orderErr.message}`);
-      return action.tradeId;
+      return { tradeId: action.tradeId, openedNewTrade: false };
     }
 
     case "REDUCE": {
@@ -339,7 +387,7 @@ async function persistAction(
       const orderInsert = buildOrderInsert(action.orderCreate, action.tradeId, userId);
       const { error: orderErr } = await admin.from("Order").insert(orderInsert);
       if (orderErr) throw new Error(`Order insert (REDUCE) failed: ${orderErr.message}`);
-      return action.tradeId;
+      return { tradeId: action.tradeId, openedNewTrade: false };
     }
 
     case "CLOSE": {
@@ -366,7 +414,7 @@ async function persistAction(
       const orderInsert = buildOrderInsert(action.orderCreate, action.tradeId, userId);
       const { error: orderErr } = await admin.from("Order").insert(orderInsert);
       if (orderErr) throw new Error(`Order insert (CLOSE) failed: ${orderErr.message}`);
-      return action.tradeId;
+      return { tradeId: action.tradeId, openedNewTrade: false };
     }
 
     case "REVERSAL": {
@@ -418,7 +466,7 @@ async function persistAction(
         throw new Error(`reverse_position RPC failed: ${rpcErr.message}`);
       }
       // Return the newly-opened trade (the active position after the reversal)
-      return newTradeId;
+      return { tradeId: newTradeId, openedNewTrade: true };
     }
   }
 }

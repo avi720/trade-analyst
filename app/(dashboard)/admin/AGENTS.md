@@ -66,12 +66,12 @@ naive `EXISTS(SELECT ... FROM "User")` form causes. Reuse the helper; don't inli
   `lastSyncError` and a **סנכרן עכשיו** button per active row.
 - **Manual sync** (`POST /api/admin/ibkr/[connectionId]/sync`) fires `syncOneConnection`
   through `waitUntil()` from `@vercel/functions` (same async pattern as the initial sync in
-  `POST /api/ibkr/connect`).
+  `POST /api/ibkr/ibrit/connect`).
   Returns 202 immediately; the UI polls `GET /api/admin/ibkr` every 5s while a sync is in
   flight. The shared pipeline is `lib/ibkr/sync-pipeline.ts` — see the `cron-and-workers` skill.
 - `/admin/broker-events` lists every `BrokerEvent` across users, 50/page, filterable by
   `processingStatus`. Detail modal shows the full row + a `<pre>` of `rawPayload` (`xml` for
-  `IBKR_FLEX` events, JSON otherwise). **Read-only** — there is no reprocess endpoint, dropped
+  historical `IBKR_FLEX` events, JSON otherwise). **Read-only** — there is no reprocess endpoint, dropped
   by owner decision 2026-07-22; the plan doc explains why.
 
 ## Phase 4 — System health dashboard

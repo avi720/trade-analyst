@@ -35,7 +35,7 @@ produces cryptic runtime failures on fresh clones.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (browser-safe, RLS-bound) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key — server-only, bypasses RLS |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth **Web** client ID for the Google Identity Services button (`components/google-signin-button.tsx`). Browser-safe. Differs per environment: Production = "Trade Analysis Web" (prod Supabase), Preview/`dev` + `.env.local` = "Trade Analyst – dev" (dev Supabase). The ID must be in that Supabase project's Google provider *Client IDs*, and the site origin in the client's *Authorized JavaScript origins* — otherwise the button renders but sign-in fails. |
-| `FLEX_TOKEN_ENCRYPTION_KEY` | 64-char hex — AES-256-GCM key for IBKR Flex token at rest |
+| `FLEX_TOKEN_ENCRYPTION_KEY` | 64-char hex — AES-256-GCM key for IBKR token at rest (name predates IBRIT) |
 | `MASSIVE_API_KEY` | Massive API key (price data; sync currently disabled) |
 | `GEMINI_API_KEY` | Google Gemini API key for the chat assistant |
 | `CRON_SECRET` | Bearer token expected by cron endpoints (`/api/cron/*`) |

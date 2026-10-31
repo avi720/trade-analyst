@@ -13,8 +13,8 @@ import { getLemonSqueezyConfig, pauseSubscription } from '@/lib/billing/lemon-sq
  * looked up server-side from the User row — the client never sends it, so a
  * user cannot pause someone else's subscription.
  *
- * The webhook (subscription_paused) will downgrade tier to Free on the next
- * event delivery — that path is already correct via isActiveStatus.
+ * The webhook (`subscription_paused`) downgrades tier to Free on delivery.
+ * `paused` is not an active status, so `grantsPro` returns false.
  */
 export async function POST(request: Request) {
   const supabase = await createClient()

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptToken } from "@/lib/ibkr/encrypt";
-import { IbkrTransientError } from "@/lib/ibkr/flex-client";
+import { IbkrTransientError } from "@/lib/ibkr/errors";
 import {
   addDaysToReportDate,
   easternReportDate,
@@ -160,7 +160,7 @@ export async function syncIbritConnection(admin: Admin, conn: ConnectionRow): Pr
     executions.sort((a, b) => a.executedAt.getTime() - b.executedAt.getTime());
     executionCount = executions.length;
 
-    const results = await processExecutions(executions, conn.userId);
+    const results = await processExecutions(executions, conn.userId, { firstTradeSource: 'ibkr' });
     const failed = results.filter((r) => r.status === "FAILED");
     failedExecutions = failed.length;
 
@@ -228,7 +228,7 @@ export async function syncIbritConnection(admin: Admin, conn: ConnectionRow): Pr
       };
     }
 
-    // Same contract as Flex: a transient error leaves lastSyncAt untouched so
+    // A transient error leaves lastSyncAt untouched so
     // the next cron run retries.
     const isTransient = err instanceof IbkrTransientError;
     await admin

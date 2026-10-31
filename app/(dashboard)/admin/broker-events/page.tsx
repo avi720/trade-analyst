@@ -72,7 +72,7 @@ export default async function AdminBrokerEventsPage({
       <header>
         <h1 className="text-xl font-semibold text-text-main">מנהל — אירועי ברוקר</h1>
         <p className="text-sm text-text-dim mt-1">
-          כל אירוע ברוקר (FLEX_FETCH ואחרים) בכל המשתמשים, ממוינים מהחדש
+          כל אירוע ברוקר (IBRIT_FETCH ואחרים) בכל המשתמשים, ממוינים מהחדש
           לישן. ה-payload הגולמי (XML/JSON) נשמר לצורך audit ומוצג בפרטים.
           הפעולה היחידה כאן היא צפייה בלבד — אין reprocess.
         </p>

@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { IbkrTransientError } from "@/lib/ibkr/flex-client";
+import { IbkrTransientError } from "@/lib/ibkr/errors";
 
 // IBKR Reporting Integration (IBRIT) Web Service, feed configured for Trade
 // Analyst by reportingintegration@interactivebrokers.com. Unlike Flex there is

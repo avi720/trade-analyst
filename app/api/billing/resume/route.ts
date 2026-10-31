@@ -11,7 +11,9 @@ import { getLemonSqueezyConfig, resumeSubscription } from '@/lib/billing/lemon-s
  * Same auth + rate-limit + lookup pattern as /api/billing/pause; the
  * subscription id is fetched server-side from the User row so a caller
  * cannot resume someone else's subscription. The webhook
- * (subscription_resumed) will restore Pro tier on the next event delivery.
+ * (`subscription_unpaused`, or `subscription_updated` with status `active`)
+ * restores Pro on the next event delivery. `subscription_resumed` is the
+ * resume-after-cancel event, not this path.
  */
 export async function POST(request: Request) {
   const supabase = await createClient()

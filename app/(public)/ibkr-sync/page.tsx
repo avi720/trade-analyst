@@ -5,7 +5,7 @@ import { FeatureLanding } from '@/components/landing/feature-landing'
 export const metadata: Metadata = {
   title: 'סנכרון אוטומטי מ-Interactive Brokers',
   description:
-    'חבר את חשבון Interactive Brokers פעם אחת דרך Flex Web Service, וקבל את כל העסקאות שלך ביומן אוטומטית — בלי CSV, בלי הזנה ידנית. הטוקן מוצפן ב-AES-256.',
+    'חבר את חשבון Interactive Brokers פעם אחת דרך IBRIT Web Service, וקבל את כל העסקאות שלך ביומן אוטומטית — בלי CSV, בלי הזנה ידנית. הטוקן מוצפן ב-AES-256.',
 }
 
 export default function IbkrSyncPage() {
@@ -19,18 +19,18 @@ export default function IbkrSyncPage() {
           <span className="text-amber">מסונכרנות אוטומטית.</span>
         </>
       }
-      subtitle="מחברים פעם אחת את ה-Flex Web Service, ומהיום כל טרייד נמשך לבד — בלי CSV, בלי הדבקות ידניות, בלי לשכוח לעדכן. אתה סוחר, אנחנו מתעדים."
+      subtitle="מחברים פעם אחת את ה-IBRIT Web Service, ומהיום כל טרייד נמשך לבד — בלי CSV, בלי הדבקות ידניות, בלי לשכוח לעדכן. אתה סוחר, אנחנו מתעדים."
       benefitsHeading="למה סנכרון אוטומטי משנה את התמונה"
       benefits={[
         {
           Icon: Link2,
           title: 'חיבור חד-פעמי',
-          body: 'מזינים טוקן Flex פעם אחת. מכאן זה רץ לבד, פעמיים ביום, בלי מגע יד.',
+          body: 'מזינים טוקן IBRIT פעם אחת. מכאן זה רץ לבד, פעמיים ביום, בלי מגע יד.',
         },
         {
           Icon: ShieldCheck,
           title: 'הטוקן מוצפן',
-          body: 'ה-Flex token נשמר בהצפנת AES-256-GCM ואינו ניתן לצפייה אחרי השמירה. גם אנחנו לא רואים אותו.',
+          body: 'טוקן ה-IBRIT נשמר בהצפנת AES-256-GCM ואינו ניתן לצפייה אחרי השמירה. גם אנחנו לא רואים אותו.',
         },
         {
           Icon: Clock,
@@ -47,7 +47,7 @@ export default function IbkrSyncPage() {
       steps={[
         {
           title: 'מחברים את IBKR',
-          body: 'בפרופיל ← ברוקר, מדביקים את ה-Flex token. זהו — ההגדרה נגמרה.',
+          body: 'בפרופיל ← ברוקר, מדביקים את טוקן ה-IBRIT ואת מזהה השאילתה. זהו — ההגדרה נגמרה.',
         },
         {
           title: 'אנחנו מושכים',

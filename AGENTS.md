@@ -12,7 +12,7 @@ detail, it belongs in a skill.
 
 **Rules** — [`.claude/rules/`](.claude/rules/). Most carry `paths:` frontmatter and load only
 when the matching files are touched (FIFO invariants + concurrency, position-mutation paths,
-`reverse_position` RPC, IBKR date parsing, multi-user/RLS, base URL, client env vars, AI
+`reverse_position` RPC, multi-user/RLS, base URL, client env vars, AI
 import, auth telemetry).
 `rtl-and-language.md` is unscoped and always loads.
 
@@ -100,9 +100,8 @@ Two layout facts that break silently if you get them wrong:
 - **IBKR**: users connect through the **IBRIT Web Service** (feed `tradeanalyst-ws`,
   `lib/ibkr/ibrit-*`): one GET per date range, rate-limited per token. The token is valid 1 year,
   encrypted AES-256-GCM at rest; expiry reminders count from `BrokerConnection.tokenConnectedAt`
-  and a rejected token sets `lastSyncStatus='TOKEN_INVALID'`. The older **Flex** Web Service
-  path (2-step pull, Activity query only) still syncs existing Flex connections and is slated
-  for removal.
+  and a rejected token sets `lastSyncStatus='TOKEN_INVALID'`. The `flexTokenEncrypted` / `flexQueryIdActivity` column names
+  predate IBRIT, which reuses them.
 - **Massive (formerly Polygon)**: `lib/massive`, `app/api/massive`, `MASSIVE_API_KEY`.
   **Price sync is currently disabled** — no workflow, sync dot removed from
   `components/sync-indicator.tsx`, settings panel hidden. Code paths still exist for re-enabling.
@@ -127,11 +126,6 @@ Fonts: **IBM Plex Mono** (numbers, tickers, timestamps) + **Assistant** (UI, Heb
 handling live in [lib/ibkr/process-executions.ts](lib/ibkr/process-executions.ts). Invariants
 and concurrency rules: [`.claude/rules/fifo-invariants.md`](.claude/rules/fifo-invariants.md),
 [`.claude/rules/fifo-concurrency.md`](.claude/rules/fifo-concurrency.md).
-
-IBKR Flex emits `dd/MM/yyyy;HH:mm:ss TimeZone`, parsed manually in
-[lib/ibkr/parse-date.ts](lib/ibkr/parse-date.ts) — see
-[`.claude/rules/ibkr-date-parsing.md`](.claude/rules/ibkr-date-parsing.md) for why `new Date()`
-and `date-fns parse()` don't work, plus the Flex dual-root quirk.
 
 ## Manual entry pipeline
 

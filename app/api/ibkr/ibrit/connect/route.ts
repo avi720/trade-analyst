@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptToken, encryptToken } from "@/lib/ibkr/encrypt";
-import { IbkrTransientError } from "@/lib/ibkr/flex-client";
+import { IbkrTransientError } from "@/lib/ibkr/errors";
 import {
   addDaysToReportDate,
   easternReportDate,
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     existing.lastSyncStatus !== IBRIT_TOKEN_INVALID_STATUS &&
     decryptToken(existing.flexTokenEncrypted) === token;
 
-  // One connection per user: this replaces a Flex connection if there is one.
+  // One connection per user.
   // Execution IDs are the same in both feeds, so already-synced trades aren't duplicated.
   const { data: conn, error } = await supabase
     .from("BrokerConnection")

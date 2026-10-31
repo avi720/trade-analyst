@@ -1095,11 +1095,11 @@ export async function classifyNote(note: string): Promise<NoteMood> {
         {
           kind: 'source',
           title: 'האישור: claim נוסף, ואז ה-pipeline המשותף',
-          ref: { file: 'app/api/trades/ai-import/[jobId]/confirm/route.ts', start: '// Atomically claim the job', end: 'const summary = await persistManualLegs(legs, user.id)' },
+          ref: { file: 'app/api/trades/ai-import/[jobId]/confirm/route.ts', start: '// Atomically claim the job', end: "const summary = await persistManualLegs(legs, user.id, 'ai_import')" },
           notes: [
             { match: ".eq('status', 'AWAITING_CONFIRMATION')", text: 'רק עבודה שמחכה לאישור עוברת ל-`IMPORTING`. לקוח רגיל (לא admin) — RLS מוודא שזו העבודה של המשתמש.' },
             { match: 'if (!claimed) {', text: 'בקשה שנייה מוצאת את העבודה כבר ב-`IMPORTING` ומקבלת 409.' },
-            { match: 'const summary = await persistManualLegs(legs, user.id)', text: 'אותו pipeline כמו הטופס הידני ויבוא האקסל: FIFO, הערות, תיוג מקור, חישוב R. במכוון **פטור** מהשומר שמונע מטופס ידני לסגור פוזיציות — לגיליון יש שורת SELL לכל BUY.' },
+            { match: "const summary = await persistManualLegs(legs, user.id, 'ai_import')", text: 'אותו pipeline כמו הטופס הידני ויבוא האקסל: FIFO, הערות, תיוג מקור, חישוב R. במכוון **פטור** מהשומר שמונע מטופס ידני לסגור פוזיציות — לגיליון יש שורת SELL לכל BUY.' },
           ],
         },
         {

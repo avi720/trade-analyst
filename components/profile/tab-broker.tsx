@@ -58,8 +58,6 @@ export function TabBroker({ userTier }: TabBrokerProps) {
     void fetchConnection().then(setConn);
   }, []);
 
-  // A leftover Flex connection still syncs on the server, but users only see
-  // IBRIT: they connect it here and it replaces the Flex one.
   const ibritConn = conn?.brokerName === IBRIT_BROKER_NAME ? conn : null;
 
   return (

@@ -21,7 +21,7 @@ export interface ClosedTrade {
   executionQuality: number | null
 }
 
-// Parsed, normalized shape of one IBKR Flex execution before FIFO processing.
+// Parsed, normalized shape of one IBKR execution before FIFO processing.
 export interface NormalizedExecution {
   brokerExecId: string
   brokerOrderId?: string
@@ -39,7 +39,7 @@ export interface NormalizedExecution {
   // entry, consumed by buildOrderInsert to populate dedicated Order columns.
   netCash?: number | null
   commissionCurrency?: string | null
-  orderTimeIso?: string | null  // pre-parsed ISO instant (parseIbkrDate applied at parse time)
+  orderTimeIso?: string | null  // pre-parsed ISO instant (parsed once at parse time)
   broker?: string | null        // e.g. 'IBKR', 'COLMEX' — chosen by the user in manual entry, injected by the IBKR parser
 }
 

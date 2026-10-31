@@ -1253,7 +1253,7 @@ print(max_drawdown(df.iloc[0:0]))  # 0.0`,
     {
       slug: 'python-files-and-scripts',
       title: 'קבצים וסקריפטים: תאריכי IBKR',
-      summary: '`pathlib`, `csv`, `json`, `argparse` ו-`if __name__ == "__main__"` — סקריפט שממיר תאריכי IBKR ל-UTC בדיוק כמו `parseIbkrDate`.',
+      summary: '`pathlib`, `csv`, `json`, `argparse` ו-`if __name__ == "__main__"` — סקריפט שממיר תאריכי IBKR ל-UTC בדיוק כמו `parseIbkrDate`, הפונקציה שהאתר השתמש בה בתקופת Flex.',
       minutes: 25,
       blocks: [
         {
@@ -1261,12 +1261,22 @@ print(max_drawdown(df.iloc[0:0]))  # 0.0`,
           body: 'IBKR שולחת תאריכים בפורמט `dd/MM/yyyy;HH:mm:ss TZ` — למשל `23/04/2026;14:30:00 EST`. האתר לא נותן לאף ספרייה לנחש מה זה: הוא מפרק את המחרוזת ידנית, מוצא את ההיסט של אזור הזמן בטבלה, ובונה את הרגע ב-UTC. בשיעור הזה נכתוב סקריפט פייתון שעושה את אותו הדבר לעמודה שלמה בקובץ CSV — ובדרך נכיר קבצים, `csv`, `json` ו-`argparse`.',
         },
         {
-          kind: 'source',
+          kind: 'snippet',
+          lang: 'ts',
           title: 'טבלת ההיסטים',
-          ref: { file: 'lib/ibkr/parse-date.ts', start: 'const TZ_OFFSETS_MINUTES' },
-          notes: [
-            { match: 'EST: -300,', text: 'היסט בדקות מ-UTC: EST הוא UTC פחות 5 שעות. EDT (שעון קיץ) הוא פחות 4 — שני הקיצורים מגיעים מ-IBKR, ולכן אין צורך לחשב שעון קיץ בעצמנו.' },
-          ],
+          code: `const TZ_OFFSETS_MINUTES: Record<string, number> = {
+  EST: -300,
+  EDT: -240,
+  CST: -360,
+  CDT: -300,
+  PST: -480,
+  PDT: -420,
+  UTC: 0,
+}`,
+        },
+        {
+          kind: 'text',
+          body: "- היסט בדקות מ-UTC: EST הוא UTC פחות 5 שעות. EDT (שעון קיץ) הוא פחות 4 — שני הקיצורים מגיעים מ-IBKR, ולכן אין צורך לחשב שעון קיץ בעצמנו.",
         },
         {
           kind: 'text',
@@ -1287,22 +1297,47 @@ naive.timestamp()   # interpreted in the MACHINE's zone: on a computer in Israel
                     # that is 11:30 UTC, while 14:30 EST is really 19:30 UTC`,
         },
         {
-          kind: 'source',
+          kind: 'snippet',
+          lang: 'ts',
           title: 'פירוק המחרוזת',
-          ref: { file: 'lib/ibkr/parse-date.ts', start: "const semicolonIdx = raw.indexOf(';')", end: 'const tzAbbrev = timeWithTz.slice' },
-          notes: [
-            { match: "raw.indexOf(';')", text: 'בפייתון: `raw.partition(";")` מחזיר tuple של (לפני, מפריד, אחרי). אם אין מפריד, האיבר האמצעי הוא מחרוזת ריקה.' },
-            { match: "timeWithTz.lastIndexOf(' ')", text: '`rpartition(" ")` — אותו דבר, מהרווח האחרון.' },
-            { match: '.trim().toUpperCase()', text: '`.strip().upper()` בפייתון.' },
-          ],
+          code: `const semicolonIdx = raw.indexOf(';')
+  if (semicolonIdx === -1) {
+    console.error('[parseIbkrDate] missing semicolon separator:', raw)
+    return null
+  }
+
+  const datePart = raw.slice(0, semicolonIdx).trim()
+  const timeWithTz = raw.slice(semicolonIdx + 1).trim()
+
+  // Split "HH:mm:ss TZ" on last space to isolate timezone abbreviation
+  const lastSpace = timeWithTz.lastIndexOf(' ')
+  if (lastSpace === -1) {
+    console.error('[parseIbkrDate] missing timezone in time part:', raw)
+    return null
+  }
+
+  const timePart = timeWithTz.slice(0, lastSpace).trim()
+  const tzAbbrev = timeWithTz.slice(lastSpace + 1).trim().toUpperCase()`,
         },
         {
-          kind: 'source',
+          kind: 'text',
+          body: "- בפייתון: `raw.partition(\";\")` מחזיר tuple של (לפני, מפריד, אחרי). אם אין מפריד, האיבר האמצעי הוא מחרוזת ריקה.\n- `rpartition(\" \")` — אותו דבר, מהרווח האחרון.\n- `.strip().upper()` בפייתון.",
+        },
+        {
+          kind: 'snippet',
+          lang: 'ts',
           title: 'ההמרה ל-UTC',
-          ref: { file: 'lib/ibkr/parse-date.ts', start: '// Date.UTC() treats all arguments as UTC', end: 'return new Date(utcMs)' },
-          notes: [
-            { match: 'const utcMs = wallClockUtcMs - offsetMinutes * 60_000', text: 'בונים את השעה "כאילו היא UTC", ומחסירים את ההיסט. בפייתון: `datetime(..., tzinfo=timezone.utc) - timedelta(minutes=offset)`.' },
-          ],
+          code: `// Date.UTC() treats all arguments as UTC — gives us the "wall clock as if UTC" timestamp.
+  // Subtracting the timezone offset converts wall-clock-in-TZ → true UTC.
+  // Example: 14:30:00 EST (offset=-300): wallClockUTC=14:30Z, utcMs=14:30Z+5h=19:30Z ✓
+  const wallClockUtcMs = Date.UTC(year, month - 1, day, hours, minutes, seconds)
+  const utcMs = wallClockUtcMs - offsetMinutes * 60_000
+
+  return new Date(utcMs)`,
+        },
+        {
+          kind: 'text',
+          body: "- בונים את השעה \"כאילו היא UTC\", ומחסירים את ההיסט. בפייתון: `datetime(..., tzinfo=timezone.utc) - timedelta(minutes=offset)`.",
         },
         {
           kind: 'snippet',

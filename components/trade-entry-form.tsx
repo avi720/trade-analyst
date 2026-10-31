@@ -520,6 +520,8 @@ export function TradeEntryForm() {
 
     setSubmitting(true)
     try {
+      const { trackEvent } = await import('@/lib/analytics/posthog')
+      trackEvent('import_started', { source: 'manual' })
       const res = await fetch('/api/trades/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -536,7 +538,6 @@ export function TradeEntryForm() {
       }
       setResult(json)
       if (json.processed > 0) {
-        const { trackEvent } = await import('@/lib/analytics/posthog')
         trackEvent('first_trade_imported', { source: 'manual_form', count: json.processed })
         setLegs([EMPTY_LEG()])
         // The batch just opened positions — refresh the guard's view of them.

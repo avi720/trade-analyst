@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "test_mode": true,
+    "event_name": "subscription_payment_success",
+    "webhook_id": "11aa22bb-33cc-44dd-85ee-66778899aabb",
+    "custom_data": {
+      "user_id": "a0000000-0000-4000-8000-000000000027"
+    }
+  },
+  "data": {
+    "type": "subscription-invoices",
+    "id": "773001",
+    "attributes": {
+      "store_id": 18432,
+      "subscription_id": 847291,
+      "customer_id": 5829104,
+      "user_name": "Noa Levi",
+      "user_email": "noa.levi@example.com",
+      "billing_reason": "initial",
+      "card_brand": "visa",
+      "card_last_four": "4242",
+      "currency": "USD",
+      "currency_rate": "1.00000000",
+      "status": "paid",
+      "status_formatted": "Paid",
+      "refunded": false,
+      "refunded_at": null,
+      "subtotal": 1999,
+      "discount_total": 0,
+      "tax": 0,
+      "tax_inclusive": false,
+      "total": 1999,
+      "refunded_amount": 0,
+      "subtotal_usd": 1999,
+      "discount_total_usd": 0,
+      "tax_usd": 0,
+      "total_usd": 1999,
+      "refunded_amount_usd": 0,
+      "urls": {
+        "invoice_url": "https://app.lemonsqueezy.com/my-orders/89b36d62-4f5c-4353-853f-0c769d0535c8/subscription-invoice/773001?signature=8847fff02e1bfb0c7c43ff1cdf1b1657a8eed2029413692663b86859208c9f42"
+      },
+      "created_at": "2026-10-20T10:00:05.000000Z",
+      "updated_at": "2026-10-20T10:00:05.000000Z",
+      "test_mode": true
+    },
+    "relationships": {
+      "store": {
+        "links": {
+          "related": "https://api.lemonsqueezy.com/v1/subscription-invoices/773001/store",
+          "self": "https://api.lemonsqueezy.com/v1/subscription-invoices/773001/relationships/store"
+        }
+      },
+      "subscription": {
+        "links": {
+          "related": "https://api.lemonsqueezy.com/v1/subscription-invoices/773001/subscription",
+          "self": "https://api.lemonsqueezy.com/v1/subscription-invoices/773001/relationships/subscription"
+        }
+      }
+    },
+    "links": {
+      "self": "https://api.lemonsqueezy.com/v1/subscription-invoices/773001"
+    }
+  }
+}

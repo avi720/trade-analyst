@@ -44,7 +44,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>חיבור לברוקר:</strong> אם בחרת לחבר את חשבון Interactive
-            Brokers שלך, אנחנו שומרים את ה-Token להזדהות מול ה-Flex Web Service
+            Brokers שלך, אנחנו שומרים את ה-Token להזדהות מול ה-IBRIT Web Service
             של IBKR. ה-Token מוצפן באמצעות AES-256-GCM ולא ניתן לצפייה לאחר
             שמירתו.
           </li>
