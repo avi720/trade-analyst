@@ -1,22 +1,15 @@
 name: CI
 
 # Lint + typecheck + the full vitest suite (unit and integration) on every push
-# and PR to dev / main. The integration suites hit the real DEV Supabase project
-# (sssichkbdqariguvqprc) — never put production credentials in these secrets.
+# and PR to dev / main. No path filters: these jobs are required status checks,
+# and a filtered-out run never reports, which would leave docs-only PRs stuck.
+# The integration suites hit the real DEV Supabase project (sssichkbdqariguvqprc) — never put production credentials in these secrets.
 # `next build` is not run here: Vercel already builds every push.
 on:
   push:
     branches: [dev, main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.claude/**'
   pull_request:
     branches: [dev, main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.claude/**'
 
 permissions:
   contents: read
