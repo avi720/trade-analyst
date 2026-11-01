@@ -1,0 +1,65 @@
+name: CI
+
+# Lint + typecheck + the full vitest suite (unit and integration) on every push
+# and PR to dev / main. The integration suites hit the real DEV Supabase project
+# (sssichkbdqariguvqprc) — never put production credentials in these secrets.
+# `next build` is not run here: Vercel already builds every push.
+on:
+  push:
+    branches: [dev, main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.claude/**'
+  pull_request:
+    branches: [dev, main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.claude/**'
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-static-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+
+  tests:
+    runs-on: ubuntu-latest
+    # Integration suites own fixed test-user UUIDs on the shared dev DB, so two
+    # CI runs must never overlap. Queue instead of cancelling an in-flight run.
+    concurrency:
+      group: ci-tests-dev-db
+      cancel-in-progress: false
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.DEV_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The integration suites skip silently without these — in CI that would
+      # be a green run that tested nothing, so fail loudly instead.
+      - name: Require Supabase test credentials
+        run: |
+          for v in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::$v is empty (missing repo secret, or a fork PR)"; exit 1; fi
+          done
+      - run: npm run test:run
