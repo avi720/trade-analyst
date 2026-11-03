@@ -61,7 +61,7 @@ remove the `/api/cron/*` exclusion from the proxy matcher) and
 
 `npm run build` is the TypeScript gate; `npm run db:seed` reads `.env.local` with the service-role key.
 
-**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): lint, `tsc --noEmit` and the full vitest suite on every push/PR to `dev` and `main`; both jobs (`static`, `tests`) are required status checks on both branches (admins can bypass). The integration suites run against the **dev** Supabase project through the `DEV_SUPABASE_*` repo secrets — never put production keys there. A suite must set its own env (e.g. `vi.stubEnv`) rather than lean on `.env.local`, which CI does not have.
+**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): lint, `tsc --noEmit` and the full vitest suite on every PR to `dev`/`main` and on push to `main` (not push to `dev`, to avoid running each commit twice, so a branch with no open PR gets no CI); `static` and `tests` are required status checks on both branches (admins can bypass). A separate `audit` job runs `npm audit --omit=dev --audit-level=high` (production deps only; not a required check). Node version: `.nvmrc` (24, matching Vercel), mirrored in `engines.node`. The integration suites run against the **dev** Supabase project through the `DEV_SUPABASE_*` repo secrets — never put production keys there. A suite must set its own env (e.g. `vi.stubEnv`) rather than lean on `.env.local`, which CI does not have.
 
 ## Architecture
 
