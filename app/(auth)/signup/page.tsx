@@ -16,7 +16,7 @@ import { signupMethodFromProvider } from '@/lib/analytics/signup-method'
 
 const step1Schema = z
   .object({
-    email:           z.string().email('כתובת מייל לא תקינה'),
+    email:           z.email('כתובת מייל לא תקינה'),
     password:        z
       .string()
       .min(8, 'הסיסמה חייבת להכיל לפחות 8 תווים')
@@ -25,7 +25,7 @@ const step1Schema = z
     confirmPassword: z.string(),
   })
   .refine(d => d.password === d.confirmPassword, {
-    message: 'הסיסמאות אינן תואמות',
+    error:   'הסיסמאות אינן תואמות',
     path:    ['confirmPassword'],
   })
 

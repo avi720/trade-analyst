@@ -10,7 +10,7 @@ import { syncOneConnection } from '@/lib/ibkr/sync-pipeline'
 
 export const maxDuration = 300
 
-const uuidSchema = z.string().uuid()
+const uuidSchema = z.guid()
 
 // POST /api/admin/ibkr/[connectionId]/sync — kicks off the same
 // syncOneConnection() the cron uses, for a single connection, asynchronously.
