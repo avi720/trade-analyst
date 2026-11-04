@@ -919,7 +919,7 @@ parsed.data.plan  // 'monthly' | 'annual' — checked at runtime`,
           title: 'שתי צורות אפשריות לתוצאת ה-worker',
           ref: { file: 'app/api/cron/ai-import-result/route.ts', start: 'const legErrorSchema', end: 'const bodySchema = z.discriminatedUnion' },
           notes: [
-            { match: 'jobId: z.string().uuid()', text: 'zod בודק דברים שאין להם טיפוס ב-TS: "מחרוזת בפורמט UUID". הטיפוס הנגזר הוא סתם `string`, אבל הבדיקה בזמן ריצה מחמירה יותר.' },
+            { match: 'jobId: z.guid()', text: 'zod בודק דברים שאין להם טיפוס ב-TS: "מחרוזת בפורמט UUID". הטיפוס הנגזר הוא סתם `string`, אבל הבדיקה בזמן ריצה מחמירה יותר.' },
             { match: "status: z.literal('AWAITING_CONFIRMATION')", text: '`z.literal` — ליטרל בודד. זה ה-discriminant של ווריאנט ההצלחה.' },
             { match: 'errorMessage: z.string().max(2000)', text: 'רק בווריאנט הכישלון יש `errorMessage`, ואורכו מוגבל — כדי ש-worker תקול לא יכתוב מגה של טקסט לשורה במסד.' },
             { match: "z.discriminatedUnion('status', [successSchema, failSchema])", text: 'הגרסה של zod ל-`FifoAction`: union לפי השדה `status`. zod בודק קודם את `status`, ואז מאמת את הגוף מול הווריאנט המתאים בלבד.' },
@@ -967,8 +967,8 @@ parsed.data.plan  // 'monthly' | 'annual' — checked at runtime`,
 import { z } from 'zod'
 
 const reduceSchema = z.object({
-  quantity: z.number().finite().positive(),
-  price: z.number().finite().positive(),
+  quantity: z.number().positive(),
+  price: z.number().positive(),
   date: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/),
   reason: z.string().max(500).optional(),
 })

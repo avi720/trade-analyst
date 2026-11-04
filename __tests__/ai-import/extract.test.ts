@@ -77,13 +77,13 @@ describe('extract', () => {
 
   it('upgrades to pro when flash confidence is below the floor', async () => {
     const call: GeminiCall = vi.fn(async ({ model }) => {
-      const conf = model === 'gemini-2.5-pro' ? 0.95 : 0.3
+      const conf = model === 'gemini-3.8-flash' ? 0.95 : 0.3
       return JSON.stringify({ ...JSON.parse(flatMappingJson), confidence: conf })
     })
     const res = await extract(sampleWith([['h'], ['x']]), { call, delayFn: noDelay })
     expect(res.confidence).toBe(0.95)
     const models = (call as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].model)
-    expect(models).toContain('gemini-2.5-pro')
+    expect(models).toContain('gemini-3.8-flash')
   })
 
   it('chunks a large sheet when extraction under-covers, merging + deduping legs', async () => {

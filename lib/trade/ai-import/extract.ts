@@ -9,7 +9,7 @@ import {
   type SheetSample,
 } from './types'
 
-export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro'
+export type GeminiModel = 'gemini-3.5-flash-lite' | 'gemini-3.8-flash'
 
 /** Injectable one-shot Gemini call. Returns the raw model text (expected JSON). */
 export interface GeminiCall {
@@ -67,23 +67,30 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p.finally(() => clearTimeout(timer)), timeout])
 }
 
-/** Default caller — real Gemini via @google/genai, JSON mode, temperature 0. */
+/**
+ * Default caller — real Gemini via the Interactions API, JSON mode. Stateless (`store: false`):
+ * the prompt carries the user's spreadsheet, and nothing needs it after this one call. The 3.x
+ * models ignore temperature/top_p/top_k, so determinism comes from the system prompt plus the
+ * zod validation and retry in `callAndParse`, not from sampling settings.
+ */
 function makeDefaultCall(timeoutMs: number): GeminiCall {
   const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
   return async ({ systemPrompt, userPrompt, model }) => {
     const res = await withTimeout(
-      genAI.models.generateContent({
+      genAI.interactions.create({
         model,
-        contents: userPrompt,
-        config: {
-          systemInstruction: systemPrompt,
-          responseMimeType: 'application/json',
-          temperature: 0,
-        },
+        input: userPrompt,
+        system_instruction: systemPrompt,
+        response_format: { type: 'text', mime_type: 'application/json' },
+        // Flash-Lite defaults to minimal thinking; reading a messy sheet needs more.
+        ...(model === 'gemini-3.5-flash-lite'
+          ? { generation_config: { thinking_level: 'medium' as const } }
+          : {}),
+        store: false,
       }),
       timeoutMs,
     )
-    return res.text ?? ''
+    return res.output_text ?? ''
   }
 }
 
@@ -242,7 +249,7 @@ function legKey(l: AiLeg): string {
 
 /**
  * Runs the AI cascade over a sampled workbook and returns a validated AiMapping.
- * - Starts on flash; if confidence is low, retries once on pro.
+ * - Starts on Flash-Lite; if confidence is low, retries once on 3.8 Flash.
  * - For extraction results that under-cover a large sheet, chunks the sheet and
  *   merges the legs.
  * The caller (mapping mode) or this function (extraction mode) produces legs;
@@ -259,14 +266,14 @@ export async function extract(sample: WorkbookSample, opts: ExtractOptions = {})
   const systemPrompt = SYSTEM_PROMPT
   const userPrompt = buildUserPrompt(sample)
 
-  let result = await callAndParse(call, systemPrompt, userPrompt, 'gemini-2.5-flash', retries, delayFn, budget)
+  let result = await callAndParse(call, systemPrompt, userPrompt, 'gemini-3.5-flash-lite', retries, delayFn, budget)
 
-  // Low-confidence upgrade: one pass on pro.
+  // Low-confidence upgrade: one pass on 3.8 Flash.
   if (result.confidence < CONFIDENCE_FLOOR) {
     try {
-      result = await callAndParse(call, systemPrompt, userPrompt, 'gemini-2.5-pro', retries, delayFn, budget)
+      result = await callAndParse(call, systemPrompt, userPrompt, 'gemini-3.8-flash', retries, delayFn, budget)
     } catch {
-      // keep the flash result if the upgrade attempt fails
+      // keep the Flash-Lite result if the upgrade attempt fails
     }
   }
 
@@ -293,7 +300,7 @@ export async function extract(sample: WorkbookSample, opts: ExtractOptions = {})
         call,
         systemPrompt,
         chunkPrompt,
-        'gemini-2.5-flash',
+        'gemini-3.5-flash-lite',
         retries,
         delayFn,
         budget,

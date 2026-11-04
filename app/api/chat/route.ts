@@ -64,8 +64,8 @@ function extractTradeIds(contextData: unknown): Set<string> | null {
  * near zero across multi-turn conversations in production, the assumption is
  * wrong and the decision needs revisiting.
  *
- * `thoughtsTokens` is here for a second reason — thinking is on by default for
- * 2.5 and bills as output. Turns that spend more on thinking than on the answer
+ * `thoughtsTokens` is here for a second reason — both 3.x models think before
+ * answering, and thinking bills as output. Turns that spend more on thinking than on the answer
  * are worth knowing about before deciding whether to cap the thinking budget.
  */
 function logTurn(fields: {
@@ -269,10 +269,11 @@ export async function POST(request: Request) {
     ? buildChatContext({ trades, mode, stats, filterActive: filterIds !== null, timeZone, omitRows: true })
     : probe
 
-  // P1-D: Gemini 2.5 rejects a request carrying both `googleSearch` and custom
-  // `functionDeclarations`, so grounding is offered only on turns that register
-  // no tools. That is *tool-call* XOR web, not data XOR web — a grounded turn
-  // still has the inline rows and KPIs as plain prompt text.
+  // P1-D: grounding is offered only on turns that register no tools. Gemini 2.5
+  // rejected search together with function declarations; 3.x on Interactions
+  // accepts both, so this is now a product gate (lib/chat/AGENTS.md). It is
+  // *tool-call* XOR web, not data XOR web — a grounded turn still has the
+  // inline rows and KPIs as plain prompt text.
   const webSearch = isProTier(tier) && !useTools
 
   const systemPrompt = buildSystemPrompt({
@@ -282,7 +283,7 @@ export async function POST(request: Request) {
     webSearch,
     timeZone,
   })
-  const model = contextMode === 'full' ? 'gemini-2.5-pro' : 'gemini-2.5-flash'
+  const model = contextMode === 'full' ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite'
 
   // Load or create conversation
   const convId = conversationId ?? crypto.randomUUID()

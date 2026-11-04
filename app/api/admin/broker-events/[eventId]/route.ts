@@ -6,7 +6,7 @@ import {
 } from '@/lib/auth/require-admin'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-const uuidSchema = z.string().uuid()
+const uuidSchema = z.guid()
 
 // GET /api/admin/broker-events/[eventId] — full BrokerEvent payload for
 // the detail modal. Includes rawPayload (JSON blob; for historical IBKR_FLEX events

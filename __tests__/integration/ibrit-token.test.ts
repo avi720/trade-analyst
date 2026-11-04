@@ -80,6 +80,8 @@ describe.skipIf(!DB_AVAILABLE)('IBRIT token lifecycle', { timeout: 30_000 }, () 
   const sendsToTestUser = () => sendEmail.mock.calls.filter(([m]) => m.to === TEST_EMAIL)
 
   beforeAll(async () => {
+    // encryptToken needs a key; own a throwaway one so the suite doesn't depend on .env.local (CI has none).
+    vi.stubEnv('FLEX_TOKEN_ENCRYPTION_KEY', 'a'.repeat(64))
     await cleanup()
     const { error: authErr } = await admin.auth.admin.createUser({
       id: TEST_USER_ID,

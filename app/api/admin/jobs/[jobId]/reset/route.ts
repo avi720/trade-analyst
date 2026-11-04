@@ -6,7 +6,7 @@ import {
 } from '@/lib/auth/require-admin'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-const uuidSchema = z.string().uuid()
+const uuidSchema = z.guid()
 
 // POST /api/admin/jobs/[jobId]/reset — resets an ExcelImportJob back to
 // PENDING so the next worker drain (repository_dispatch or */30 schedule)

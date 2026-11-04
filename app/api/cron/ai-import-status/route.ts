@@ -7,7 +7,7 @@ export const maxDuration = 30
 
 // Only the PARSING → AI_MAPPING intermediate transition is permitted here.
 const bodySchema = z.object({
-  jobId: z.string().uuid(),
+  jobId: z.guid(),
   status: z.literal('AI_MAPPING'),
 })
 

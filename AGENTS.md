@@ -54,12 +54,16 @@ directories with knowledge the code doesn't make obvious get one:
 **Decisions** — [docs/decisions/](docs/decisions/) records things that are deliberately not
 built or deliberately off, so they don't get "fixed":
 [geo-gate.md](docs/decisions/geo-gate.md) (built, off on purpose — do not enable, and do not
-remove the `/api/cron/*` exclusion from the proxy matcher) and
-[captcha-dropped.md](docs/decisions/captcha-dropped.md).
+remove the `/api/cron/*` exclusion from the proxy matcher),
+[captcha-dropped.md](docs/decisions/captcha-dropped.md) and
+[gemini-conversation-state.md](docs/decisions/gemini-conversation-state.md) (Gemini
+Interactions calls stay stateless — no `previous_interaction_id`, `store: false`).
 
 ## Commands
 
 `npm run build` is the TypeScript gate; `npm run db:seed` reads `.env.local` with the service-role key.
+
+**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): lint, `tsc --noEmit` and the full vitest suite on every PR to `dev`/`main` and on push to `main` (not push to `dev`, to avoid running each commit twice, so a branch with no open PR gets no CI); `static` and `tests` are required status checks on both branches (admins can bypass). A separate `audit` job runs `npm audit --omit=dev --audit-level=high` (production deps only; not a required check). Node version: `.nvmrc` (24, matching Vercel), mirrored in `engines.node`. The integration suites run against the **dev** Supabase project through the `DEV_SUPABASE_*` repo secrets — never put production keys there. A suite must set its own env (e.g. `vi.stubEnv`) rather than lean on `.env.local`, which CI does not have.
 
 ## Architecture
 
