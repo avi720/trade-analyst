@@ -113,9 +113,9 @@ function toolRules(toolNames: string[]): string {
 }
 
 /**
- * P1-D. Gemini 2.5 cannot serve native Search grounding and custom function
- * tools in the same request, so a turn is either web-capable or tool-capable,
- * never both. The user does not know that, and a question can easily need
+ * P1-D. A turn is either web-capable or tool-capable, never both — a Gemini 2.5
+ * limit (search plus function tools in one request was rejected) that 3.x on
+ * Interactions no longer has, kept as a product gate until the owner decides. The user does not know that, and a question can easily need
  * both ("how did my NVDA trades do around the earnings report?"). Silently
  * answering half of it is the failure mode worth prompting against.
  */

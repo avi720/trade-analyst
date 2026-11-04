@@ -1,4 +1,4 @@
-import { GoogleGenAI, ThinkingLevel } from '@google/genai'
+import { GoogleGenAI } from '@google/genai'
 import {
   aiMappingSchema,
   MAPPABLE_FIELDS,
@@ -68,29 +68,29 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Default caller — real Gemini via @google/genai, JSON mode. The 3.x models ignore
- * temperature/top_p/top_k, so determinism comes from the system prompt plus the zod
- * validation and retry in `callAndParse`, not from sampling settings.
+ * Default caller — real Gemini via the Interactions API, JSON mode. Stateless (`store: false`):
+ * the prompt carries the user's spreadsheet, and nothing needs it after this one call. The 3.x
+ * models ignore temperature/top_p/top_k, so determinism comes from the system prompt plus the
+ * zod validation and retry in `callAndParse`, not from sampling settings.
  */
 function makeDefaultCall(timeoutMs: number): GeminiCall {
   const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
   return async ({ systemPrompt, userPrompt, model }) => {
     const res = await withTimeout(
-      genAI.models.generateContent({
+      genAI.interactions.create({
         model,
-        contents: userPrompt,
-        config: {
-          systemInstruction: systemPrompt,
-          responseMimeType: 'application/json',
-          // Flash-Lite defaults to minimal thinking; reading a messy sheet needs more.
-          ...(model === 'gemini-3.5-flash-lite'
-            ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } }
-            : {}),
-        },
+        input: userPrompt,
+        system_instruction: systemPrompt,
+        response_format: { type: 'text', mime_type: 'application/json' },
+        // Flash-Lite defaults to minimal thinking; reading a messy sheet needs more.
+        ...(model === 'gemini-3.5-flash-lite'
+          ? { generation_config: { thinking_level: 'medium' as const } }
+          : {}),
+        store: false,
       }),
       timeoutMs,
     )
-    return res.text ?? ''
+    return res.output_text ?? ''
   }
 }
 

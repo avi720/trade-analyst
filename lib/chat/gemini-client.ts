@@ -1,10 +1,4 @@
-import {
-  GoogleGenAI,
-  ThinkingLevel,
-  type FunctionDeclaration,
-  type GenerateContentResponse,
-  type ThinkingConfig,
-} from '@google/genai'
+import { GoogleGenAI, type FunctionDeclaration, type Interactions } from '@google/genai'
 
 export type ChatMessage = { role: 'user' | 'model'; parts: [{ text: string }] }
 
@@ -12,13 +6,41 @@ export type GeminiModel = 'gemini-3.5-flash-lite' | 'gemini-3.8-flash'
 
 const RETRY_DELAYS = [1000, 2000, 4000, 8000, 16000]
 
+type Step = Interactions.Step
+type Interaction = Interactions.Interaction
+type GenerationConfig = Interactions.GenerationConfig
+
+// One client per process: the SDK logs an "experimental" warning the first time each client
+// touches `.interactions`, which a per-turn client would repeat on every chat turn.
+let client: GoogleGenAI | undefined
+function interactions() {
+  client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
+  return client.interactions
+}
+
 /**
  * Flash-Lite defaults to `minimal` thinking, which is too shallow for analysing a trade set or
  * driving the tool loop — Google's migration guide asks for medium+ there. 3.8 Flash has no
  * `minimal` level and its default already fits, so it is left alone.
  */
-function thinkingConfigFor(model: GeminiModel): ThinkingConfig | undefined {
-  return model === 'gemini-3.5-flash-lite' ? { thinkingLevel: ThinkingLevel.MEDIUM } : undefined
+function generationConfigFor(model: GeminiModel): GenerationConfig | undefined {
+  return model === 'gemini-3.5-flash-lite' ? { thinking_level: 'medium' } : undefined
+}
+
+function textStep(type: 'user_input' | 'model_output', text: string): Step {
+  return { type, content: [{ type: 'text', text }] }
+}
+
+/**
+ * Our stored history plus the new message, as Interactions input steps. Every call is
+ * stateless (`store: false`, no `previous_interaction_id`): `AIConversation.messages` is the
+ * only copy of the conversation — see docs/decisions/gemini-conversation-state.md.
+ */
+function toSteps(history: ChatMessage[], newMessage: string): Step[] {
+  return [
+    ...history.map(m => textStep(m.role === 'user' ? 'user_input' : 'model_output', m.parts[0].text)),
+    textStep('user_input', newMessage),
+  ]
 }
 
 /**
@@ -41,15 +63,15 @@ const ZERO_USAGE: GeminiUsage = {
   promptTokens: 0, cachedTokens: 0, responseTokens: 0, totalTokens: 0, thoughtsTokens: 0,
 }
 
-function addUsage(acc: GeminiUsage, result: GenerateContentResponse): GeminiUsage {
-  const u = result.usageMetadata
+function addUsage(acc: GeminiUsage, result: Interaction): GeminiUsage {
+  const u = result.usage
   if (!u) return acc
   return {
-    promptTokens: acc.promptTokens + (u.promptTokenCount ?? 0),
-    cachedTokens: acc.cachedTokens + (u.cachedContentTokenCount ?? 0),
-    responseTokens: acc.responseTokens + (u.candidatesTokenCount ?? 0),
-    totalTokens: acc.totalTokens + (u.totalTokenCount ?? 0),
-    thoughtsTokens: acc.thoughtsTokens + (u.thoughtsTokenCount ?? 0),
+    promptTokens: acc.promptTokens + (u.total_input_tokens ?? 0),
+    cachedTokens: acc.cachedTokens + (u.total_cached_tokens ?? 0),
+    responseTokens: acc.responseTokens + (u.total_output_tokens ?? 0),
+    totalTokens: acc.totalTokens + (u.total_tokens ?? 0),
+    thoughtsTokens: acc.thoughtsTokens + (u.total_thought_tokens ?? 0),
   }
 }
 
@@ -74,10 +96,11 @@ export interface CallGeminiOptions {
    * P1-D — enable Gemini's native Google Search grounding for this turn.
    *
    * Only ever set for Pro users on a turn with **no custom function tools
-   * registered**: Gemini 2.5 cannot serve `googleSearch` and
-   * `functionDeclarations` in the same request. Note the constraint is
-   * tool-call XOR web, not data XOR web — the inline trade rows and KPIs are
-   * plain prompt text, so a grounded turn still answers from the user's data.
+   * registered**. The gate dates from Gemini 2.5, which could not serve search
+   * and function declarations in one request; 3.x on Interactions can, so it is
+   * now a product choice (see `lib/chat/AGENTS.md`). It is tool-call XOR web,
+   * not data XOR web — the inline trade rows and KPIs are plain prompt text,
+   * so a grounded turn still answers from the user's data.
    */
   webSearch?: boolean
   /** P1-F — receives the turn's token accounting for observability logging. */
@@ -95,22 +118,18 @@ export async function callGemini(
   const delayFn = opts.delayFn ?? (ms => new Promise(r => setTimeout(r, ms)))
   const webSearch = opts.webSearch ?? false
 
-  const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
-
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const chat = genAI.chats.create({
+      const result = await interactions().create({
         model,
-        history,
-        config: {
-          systemInstruction: systemPrompt,
-          thinkingConfig: thinkingConfigFor(model),
-          ...(webSearch ? { tools: [{ googleSearch: {} }] } : {}),
-        },
+        input: toSteps(history, newMessage),
+        system_instruction: systemPrompt,
+        generation_config: generationConfigFor(model),
+        ...(webSearch ? { tools: [{ type: 'google_search' }] } : {}),
+        store: false,
       })
-      const result = await chat.sendMessage({ message: newMessage })
       opts.onUsage?.(addUsage(ZERO_USAGE, result))
-      return result.text ?? ''
+      return result.output_text ?? ''
     } catch (error) {
       console.error(`[gemini] attempt ${attempt + 1} failed:`, error)
       if (attempt === retries || !isRetryable(error)) {
@@ -142,6 +161,23 @@ export interface ChatToolRuntime {
   execute: (name: string, args: Record<string, unknown>) => Promise<unknown> | unknown
 }
 
+/**
+ * A `generateContent`-style function declaration as an Interactions function tool. The
+ * declarations use the SDK's `Type` enum (`'OBJECT'`, `'STRING'`); Interactions documents
+ * lowercase JSON Schema types, so they are lowered here rather than relying on the API
+ * accepting both.
+ */
+function toFunctionTool(d: FunctionDeclaration): Interactions.Tool {
+  return { type: 'function', name: d.name, description: d.description, parameters: lowerTypes(d.parameters) }
+}
+
+function lowerTypes(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(lowerTypes)
+  if (!schema || typeof schema !== 'object') return schema
+  return Object.fromEntries(Object.entries(schema).map(([k, v]) =>
+    [k, k === 'type' && typeof v === 'string' ? v.toLowerCase() : lowerTypes(v)]))
+}
+
 export interface ToolLoopResult {
   text: string
   /** Every tool the model actually invoked, in order — for logging and tests. */
@@ -153,14 +189,18 @@ export interface ToolLoopResult {
 
 /**
  * Runs one chat turn with function-tools registered, driving the
- * model → functionCall → functionResponse → model loop to a text answer.
+ * model → function_call → function_result → model loop to a text answer.
  *
  * Used only above the inline byte budget (see `context-builder.ts`); below it
  * the rows are already in the prompt and `callGemini` answers in one hop.
  *
- * Note for P1-D: Gemini 2.5 cannot combine native Search grounding with custom
- * function declarations in the same request. Any turn that reaches this
- * function is therefore a tool-call turn with web grounding off.
+ * Stateless like `callGemini`: each round resends the whole turn so far — the
+ * history, then every step the model returned (thoughts and calls carry the
+ * signatures the 3.x models validate), then our function results.
+ *
+ * Note for P1-D: no web grounding is registered here. Gemini 2.5 could not
+ * combine Search with function declarations; 3.x on Interactions can, so
+ * adding it is a product decision, not an API limit.
  */
 export async function callGeminiWithTools(
   history: ChatMessage[],
@@ -178,22 +218,20 @@ export async function callGeminiWithTools(
   const retries = opts.retries ?? 5
   const delayFn = opts.delayFn ?? (ms => new Promise(r => setTimeout(r, ms)))
 
-  const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
-  const chat = genAI.chats.create({
-    model,
-    history,
-    config: {
-      systemInstruction: systemPrompt,
-      thinkingConfig: thinkingConfigFor(model),
-      tools: [{ functionDeclarations: tools.declarations }],
-    },
-  })
+  const functionTools = tools.declarations.map(toFunctionTool)
+  const input = toSteps(history, newMessage)
 
-  async function send(message: unknown): Promise<GenerateContentResponse> {
+  async function send(generationConfig = generationConfigFor(model)): Promise<Interaction> {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return await chat.sendMessage({ message: message as any })
+        return await interactions().create({
+          model,
+          input: [...input],
+          system_instruction: systemPrompt,
+          generation_config: generationConfig,
+          tools: functionTools,
+          store: false,
+        })
       } catch (error) {
         console.error(`[gemini:tools] attempt ${attempt + 1} failed:`, error)
         if (attempt === retries || !isRetryable(error)) {
@@ -207,22 +245,22 @@ export async function callGeminiWithTools(
 
   const toolCalls: ToolLoopResult['toolCalls'] = []
   let usage = ZERO_USAGE
-  let message: unknown = newMessage
-  let pendingResponses: unknown[] = []
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
-    const result = await send(message)
+    const result = await send()
     usage = addUsage(usage, result)
 
-    const calls = result.functionCalls ?? []
+    const steps = result.steps ?? []
+    const calls = steps.filter((s): s is Interactions.FunctionCallStep => s.type === 'function_call')
     if (calls.length === 0) {
-      return { text: result.text ?? '', toolCalls, usage, exhausted: false }
+      return { text: result.output_text ?? '', toolCalls, usage, exhausted: false }
     }
+    // The model's own steps go back verbatim, signatures included, ahead of our results.
+    input.push(...steps)
 
-    pendingResponses = []
     for (const call of calls) {
-      const name = call.name ?? ''
-      const args = (call.args ?? {}) as Record<string, unknown>
+      const name = call.name
+      const args = call.arguments ?? {}
       toolCalls.push({ name, args })
 
       let response: unknown
@@ -230,22 +268,28 @@ export async function callGeminiWithTools(
         response = await tools.execute(name, args)
       } catch (error) {
         // A failed tool is data the model can route around — surfacing it as a
-        // function response beats 500ing the whole turn over one bad argument.
+        // function result beats 500ing the whole turn over one bad argument.
         console.error(`[gemini:tools] executor "${name}" threw:`, error)
         response = { error: error instanceof Error ? error.message : 'tool execution failed' }
       }
-      // The 3.x models reject a FunctionResponse whose id does not echo its FunctionCall's.
-      pendingResponses.push({ functionResponse: { id: call.id, name, response: { result: response } } })
+      // `call_id` must echo the call's `id`, or the 3.x models reject the result.
+      input.push({
+        type: 'function_result',
+        call_id: call.id,
+        name,
+        result: [{ type: 'text', text: JSON.stringify({ result: response }) }],
+      })
     }
-    message = pendingResponses
   }
 
-  // Out of rounds with tool responses still unsent. Deliver them alongside the
-  // nudge so the final answer is built from everything that was gathered.
-  const final = await send([...pendingResponses, { text: OUT_OF_ROUNDS_NUDGE }])
+  // Out of rounds with tool results still unanswered. Deliver them alongside the
+  // nudge so the final answer is built from everything that was gathered, and
+  // switch tool calls off so this last round has to answer in text.
+  input.push(textStep('user_input', OUT_OF_ROUNDS_NUDGE))
+  const final = await send({ ...generationConfigFor(model), tool_choice: 'none' })
   usage = addUsage(usage, final)
   return {
-    text: final.text ?? 'לא הצלחתי להשלים את הניתוח בתוך מספר הצעדים המותר. נסה לצמצם את השאלה.',
+    text: final.output_text || 'לא הצלחתי להשלים את הניתוח בתוך מספר הצעדים המותר. נסה לצמצם את השאלה.',
     toolCalls,
     usage,
     exhausted: true,
