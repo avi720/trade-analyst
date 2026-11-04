@@ -20,9 +20,9 @@ export interface WorkbookSample {
 // ─── AI mapping / extraction contract ─────────────────────────────────────
 //
 // The AI returns ONE of two shapes discriminated by `mode`. We validate the
-// parsed JSON with Zod (responseSchema is intentionally NOT used — Gemini's
+// parsed JSON with Zod (a response_format schema is intentionally NOT used — Gemini's
 // schema support for discriminated unions is fragile; a clear prompt +
-// responseMimeType:'application/json' + Zod validation is more robust and
+// mime_type:'application/json' + Zod validation is more robust and
 // fully testable). `timezone` is never part of the AI output — it is injected
 // server-side from the user's explicit choice (see finalize-legs).
 

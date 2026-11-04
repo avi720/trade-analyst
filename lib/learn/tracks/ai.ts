@@ -11,7 +11,7 @@ export const aiTrack: Track = {
     {
       slug: 'ai-gemini-first-call',
       title: 'הקריאה הראשונה ל-Gemini',
-      summary: 'איך האתר מדבר עם Gemini דרך `@google/genai`: `generateContent`, `systemInstruction`, תפקידים בהיסטוריה, בחירת מודל לפי מצב השיחה, וספירת טוקנים עם `usageMetadata`.',
+      summary: 'איך האתר מדבר עם Gemini דרך ה-Interactions API של `@google/genai`: `interactions.create`, `system_instruction`, היסטוריה כ-steps, בחירת מודל לפי מצב השיחה, וספירת טוקנים עם `usage`.',
       minutes: 16,
       blocks: [
         {
@@ -22,14 +22,15 @@ export const aiTrack: Track = {
         },
         {
           kind: 'source',
-          title: 'קריאת generateContent אחת',
+          title: 'קריאת interactions.create אחת',
           ref: { file: 'lib/trade/ai-import/extract.ts', start: 'function makeDefaultCall(' },
           notes: [
             { match: 'new GoogleGenAI({', text: 'יוצרים לקוח של ה-SDK עם מפתח ה-API. המפתח נקרא ממשתנה סביבה של השרת; ה-`!` אומר ל-TypeScript "אני מבטיח שזה לא `undefined`".' },
-            { match: 'genAI.models.generateContent({', text: 'הקריאה עצמה. כל קריאה עומדת בפני עצמה — למודל **אין זיכרון** בין בקשות. מה שלא נשלח בבקשה הזו, המודל לא יודע.' },
-            { match: 'contents: userPrompt,', text: 'התוכן ש"המשתמש" שולח. מחרוזת פשוטה הופכת אוטומטית להודעה אחת בתפקיד `user`. אפשר גם להעביר מערך של הודעות — זה מה שעושה השיחה של חנן.' },
-            { match: 'systemInstruction: systemPrompt,', text: '**הוראות מערכת**: מי המודל, מה הכללים, איזה פורמט להחזיר. הן נפרדות מהשיחה — המודל מתייחס אליהן כהקשר קבוע, לא כהודעה שצריך לענות עליה.' },
-            { match: "return res.text ?? ''", text: '`text` הוא getter של ה-SDK שמחבר את חלקי הטקסט של התשובה הראשונה. הוא יכול להיות `undefined` — למשל כשהמודל ביקש להפעיל פונקציה במקום לכתוב טקסט (שיעור הבא) — ולכן `??`.' },
+            { match: 'genAI.interactions.create({', text: 'הקריאה עצמה, דרך ה-**Interactions API**. כל קריאה כאן עומדת בפני עצמה — למודל **אין זיכרון** בין בקשות. מה שלא נשלח בבקשה הזו, המודל לא יודע.' },
+            { match: 'input: userPrompt,', text: 'הקלט ש"המשתמש" שולח. מחרוזת פשוטה הופכת להודעת משתמש אחת. אפשר גם להעביר מערך של **steps** (הודעות, קריאות לכלים ותוצאות) — זה מה שעושה השיחה של חנן.' },
+            { match: 'system_instruction: systemPrompt,', text: '**הוראות מערכת** (ב-Interactions API שמות השדות ב-snake_case): מי המודל, מה הכללים, איזה פורמט להחזיר. הן נפרדות מהשיחה — המודל מתייחס אליהן כהקשר קבוע, לא כהודעה שצריך לענות עליה.' },
+            { match: 'store: false,', text: 'ה-Interactions API שומר כברירת מחדל כל קריאה בצד של Google. כאן אין בזה צורך — הגיליון של המשתמש לא צריך להישמר אצל Google אחרי הקריאה — ולכן `store: false`.' },
+            { match: "return res.output_text ?? ''", text: '`output_text` מחבר את קטעי הטקסט שבסוף התשובה. הוא יכול להיות `undefined` — למשל כשהמודל ביקש להפעיל פונקציה במקום לכתוב טקסט (שיעור הבא) — ולכן `??`.' },
           ],
         },
         {
@@ -39,30 +40,30 @@ export const aiTrack: Track = {
         },
         {
           kind: 'text',
-          body: `ל-Gemini יש שני תפקידים בשיחה: \`user\` ו-\`model\`. שימו לב — **לא** \`assistant\` כמו אצל ספקים אחרים. האתר שומר את השיחות בטבלת \`AIConversation\` עם \`assistant\`, ולכן ה-route ממיר לפני כל קריאה:`,
+          body: `בהיסטוריה של Gemini יש שני צדדים: \`user\` ו-\`model\`. שימו לב — **לא** \`assistant\` כמו אצל ספקים אחרים. האתר שומר את השיחות בטבלת \`AIConversation\` עם \`assistant\`, ולכן ה-route ממיר לפני כל קריאה:`,
         },
         {
           kind: 'source',
           title: 'המרת היסטוריה שמורה לפורמט של Gemini',
           ref: { file: 'app/api/chat/route.ts', start: 'function toGeminiHistory(' },
           notes: [
-            { match: "role: m.role === 'user' ? 'user' : 'model',", text: 'כל מה שלא `user` הופך ל-`model`. אם שולחים ל-Gemini תפקיד `assistant`, הבקשה נכשלת.' },
-            { match: 'parts: [{ text: m.content }],', text: 'הודעה ב-Gemini בנויה מ-**parts**: חלק יכול להיות טקסט, תמונה, בקשה להפעיל פונקציה או תוצאה של פונקציה. כאן כל הודעה היא חלק טקסט אחד.' },
+            { match: "role: m.role === 'user' ? 'user' : 'model',", text: 'כל מה שלא `user` הופך ל-`model`. ב-`gemini-client.ts`, `toSteps` הופך כל הודעה ל-step: `user_input` למשתמש, `model_output` למודל.' },
+            { match: 'parts: [{ text: m.content }],', text: 'הצורה הפנימית של האתר להודעה: חלק טקסט אחד. ב-Interactions API התוכן של step הוא מערך דומה, `content: [{ type: \'text\', text }]` — ושם חלק יכול להיות גם תמונה, מסמך או אודיו.' },
           ],
         },
         {
           kind: 'text',
-          body: `חנן לא משתמש ב-\`generateContent\` ישירות אלא ב-\`chats.create\` — עטיפה של ה-SDK שמחזיקה מערך היסטוריה ומוסיפה אליו כל הודעה ותשובה. מאחורי הקלעים, כל \`sendMessage\` הוא \`generateContent\` עם **כל** ההיסטוריה ועוד ההודעה החדשה.
+          body: `חנן שולח ב-\`interactions.create\` את **כל** ההיסטוריה ועוד ההודעה החדשה, כמערך steps. ה-Interactions API יודע גם לשמור את השיחה אצל Google ולהמשיך אותה עם \`previous_interaction_id\`, בלי לשלוח היסטוריה. האתר בחר שלא (\`docs/decisions/gemini-conversation-state.md\`): המסד הוא העותק היחיד של השיחה, נתוני המסחר של המשתמש לא נשמרים אצל Google, ובמדידה המטמון עבד אותו דבר בשתי הדרכים.
 
-השרת עצמו stateless: אובייקט השיחה נבנה מחדש בכל בקשה מתוך ההודעות השמורות במסד, ונזרק בסוף הבקשה.`,
+השרת עצמו stateless: הקלט נבנה מחדש בכל בקשה מתוך ההודעות השמורות במסד.`,
         },
         {
           kind: 'source',
           title: 'callGemini — תור שיחה בלי כלים',
           ref: { file: 'lib/chat/gemini-client.ts', start: 'export async function callGemini(' },
           notes: [
-            { match: 'const chat = genAI.chats.create({', text: 'אובייקט שיחה שמאותחל עם `history` מהמסד. ההיסטוריה נשלחת מחדש בכל קריאה — כך המודל "זוכר" מה נאמר קודם.' },
-            { match: '...(webSearch ? { tools: [{ googleSearch: {} }] } : {}),', text: 'spread מותנה: מוסיף את `tools` רק כשצריך חיפוש באינטרנט. על ההחלטה הזו — בשיעור על אסטרטגיית ההקשר.' },
+            { match: 'input: toSteps(history, newMessage),', text: 'ההיסטוריה מהמסד ועוד ההודעה החדשה, כמערך steps. נשלחת מחדש בכל קריאה — כך המודל "זוכר" מה נאמר קודם.' },
+            { match: "...(webSearch ? { tools: [{ type: 'google_search' }] } : {}),", text: 'spread מותנה: מוסיף את `tools` רק כשצריך חיפוש באינטרנט. על ההחלטה הזו — בשיעור על אסטרטגיית ההקשר.' },
             { match: 'if (attempt === retries || !isRetryable(error)) {', text: 'ניסיון חוזר רק על שגיאות זמניות (`429` עומס, `5xx` תקלת שרת) עם המתנה שמכפילה את עצמה (`RETRY_DELAYS`). כל שגיאה אחרת — מיד הודעה בעברית למשתמש, בלי לחשוף לו את הפרטים הטכניים.' },
             { match: 'opts.onUsage?.(addUsage(ZERO_USAGE, result))', text: 'optional chaining על פונקציה: `onUsage` נקראת רק אם הועברה. כך `callGemini` לא יודעת כלום על לוגים — ה-route מחליט מה לעשות עם ספירת הטוקנים.' },
           ],
@@ -71,13 +72,13 @@ export const aiTrack: Track = {
           kind: 'quiz',
           question: 'משתמש שולח לחנן הודעה שלישית באותה שיחה. איך המודל "זוכר" את שתי ההודעות הקודמות?',
           options: [
-            'Gemini שומר את השיחה בצד שלו לפי `conversationId`',
+            'Gemini שומר את השיחה בצד שלו, והקוד ממשיך אותה עם `previous_interaction_id`',
             'אובייקט ה-`chat` נשאר בזיכרון של השרת בין בקשות',
-            'ה-route טוען את ההודעות מ-`AIConversation` ושולח את כולן כ-`history` בכל קריאה',
+            'ה-route טוען את ההודעות מ-`AIConversation` ושולח את כולן כ-steps בכל קריאה',
             'ה-SDK שומר את ההיסטוריה ב-`localStorage`',
           ],
           answer: 2,
-          explanation: 'ל-Gemini אין מצב בין בקשות, ושרת serverless לא שומר אובייקטים בין קריאות. ה-route קורא את `messages` מהמסד, ממיר עם `toGeminiHistory`, ושולח את הכול מחדש. לכן שיחה ארוכה עולה יותר טוקנים בכל תור.',
+          explanation: 'ה-Interactions API **יכול** לשמור שיחה אצל Google, אבל האתר שולח `store: false` ולא משתמש ב-`previous_interaction_id`. שרת serverless לא שומר אובייקטים בין קריאות, ולכן ה-route קורא את `messages` מהמסד, ממיר עם `toGeminiHistory` ו-`toSteps`, ושולח את הכול מחדש. לכן שיחה ארוכה עולה יותר טוקנים בכל תור — והמטמון המובלע הוא שמוזיל אותם.',
         },
         {
           kind: 'text',
@@ -98,20 +99,20 @@ export const aiTrack: Track = {
         },
         {
           kind: 'text',
-          body: `**טוקנים.** Gemini מחייב לפי טוקנים (בערך 3–4 תווים באנגלית לטוקן; בעברית יותר טוקנים לאותו טקסט). כל תשובה מגיעה עם \`usageMetadata\` שמפרט כמה טוקנים נצרכו:
+          body: `**טוקנים.** Gemini מחייב לפי טוקנים (בערך 3–4 תווים באנגלית לטוקן; בעברית יותר טוקנים לאותו טקסט). כל תשובה מגיעה עם \`usage\` שמפרט כמה טוקנים נצרכו:
 
-- \`promptTokenCount\` — הקלט: הוראות מערכת, היסטוריה, הודעה
-- \`cachedContentTokenCount\` — **חלק** מטוקני הקלט שנמצא במטמון
-- \`candidatesTokenCount\` — התשובה עצמה
-- \`thoughtsTokenCount\` — טוקני "חשיבה", שמחויבים כמו פלט`,
+- \`total_input_tokens\` — הקלט: הוראות מערכת, היסטוריה, הודעה
+- \`total_cached_tokens\` — **חלק** מטוקני הקלט שנמצא במטמון
+- \`total_output_tokens\` — התשובה עצמה
+- \`total_thought_tokens\` — טוקני "חשיבה", שמחויבים כמו פלט`,
         },
         {
           kind: 'source',
           title: 'צבירת טוקנים לאורך תור',
           ref: { file: 'lib/chat/gemini-client.ts', start: 'function addUsage(' },
           notes: [
-            { match: 'const u = result.usageMetadata', text: 'כל `GenerateContentResponse` נושא את הספירה של הבקשה הבודדת. תור עם כלים עושה כמה בקשות, ולכן הפונקציה **צוברת** — מקבלת את הסכום עד עכשיו ומחזירה סכום חדש.' },
-            { match: 'cachedTokens: acc.cachedTokens + (u.cachedContentTokenCount ?? 0),', text: 'כל השדות אופציונליים ב-SDK, ולכן `?? 0`. שדה שחסר פשוט לא מוסיף.' },
+            { match: 'const u = result.usage', text: 'כל `Interaction` נושא את הספירה של הבקשה הבודדת. תור עם כלים עושה כמה בקשות, ולכן הפונקציה **צוברת** — מקבלת את הסכום עד עכשיו ומחזירה סכום חדש.' },
+            { match: 'cachedTokens: acc.cachedTokens + (u.total_cached_tokens ?? 0),', text: 'כל השדות אופציונליים ב-SDK, ולכן `?? 0`. שדה שחסר פשוט לא מוסיף.' },
             { match: 'thoughtsTokens:', text: 'טוקני חשיבה מחויבים כפלט. תור שמבזבז על חשיבה יותר מאשר על התשובה — שווה לדעת עליו.' },
           ],
         },
@@ -143,8 +144,8 @@ export const aiTrack: Track = {
         },
         {
           kind: 'exercise',
-          prompt: 'כתבו פונקציית שרת `askGemini(question)` שקוראת ל-`gemini-3.5-flash-lite` עם `generateContent` אחד, הוראת מערכת בעברית שמבקשת תשובה קצרה, ומדפיסה ללוג את ארבעת מוני הטוקנים (קלט, מטמון, פלט, חשיבה). החזירו את הטקסט, או מחרוזת ריקה אם אין.',
-          hint: 'התבססו על `makeDefaultCall`. את המונים קוראים מ-`res.usageMetadata`, שכל השדות שלו אופציונליים.',
+          prompt: 'כתבו פונקציית שרת `askGemini(question)` שקוראת ל-`gemini-3.5-flash-lite` עם `interactions.create` אחד, הוראת מערכת בעברית שמבקשת תשובה קצרה, ומדפיסה ללוג את ארבעת מוני הטוקנים (קלט, מטמון, פלט, חשיבה). החזירו את הטקסט, או מחרוזת ריקה אם אין.',
+          hint: 'התבססו על `makeDefaultCall`. את המונים קוראים מ-`res.usage`, שכל השדות שלו אופציונליים.',
           solution: {
             lang: 'ts',
             code: `import { GoogleGenAI } from '@google/genai'
@@ -153,23 +154,22 @@ export const aiTrack: Track = {
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
 
 export async function askGemini(question: string): Promise<string> {
-  const res = await genAI.models.generateContent({
+  const res = await genAI.interactions.create({
     model: 'gemini-3.5-flash-lite',
-    contents: question,
-    config: {
-      systemInstruction: 'אתה עוזר קצר ומדויק. ענה בעברית, במשפט אחד או שניים.',
-    },
+    input: question,
+    system_instruction: 'אתה עוזר קצר ומדויק. ענה בעברית, במשפט אחד או שניים.',
+    store: false,
   })
 
-  const u = res.usageMetadata
+  const u = res.usage
   console.log('[ask] usage', {
-    prompt: u?.promptTokenCount ?? 0,
-    cached: u?.cachedContentTokenCount ?? 0,
-    output: u?.candidatesTokenCount ?? 0,
-    thoughts: u?.thoughtsTokenCount ?? 0,
+    prompt: u?.total_input_tokens ?? 0,
+    cached: u?.total_cached_tokens ?? 0,
+    output: u?.total_output_tokens ?? 0,
+    thoughts: u?.total_thought_tokens ?? 0,
   })
 
-  return res.text ?? ''
+  return res.output_text ?? ''
 }`,
           },
         },
@@ -199,13 +199,13 @@ export async function askGemini(question: string): Promise<string> {
           title: 'תור אחד עם כלים',
           code: `# user: "באיזה setup אני מרוויח הכי הרבה?"
 #
-# [server] chat.sendMessage(question)  ------------>  Gemini
-#                                                       |  reply: functionCalls = [getSetupBreakdown({})]
+# [server] interactions.create([question])  ------->  Gemini
+#                                                       |  steps: function_call getSetupBreakdown({})
 # [server] tool.execute(args, ctx)   <------------------+
 #          (our code, our data, on Vercel)
 #                |
-# [server] chat.sendMessage([functionResponse]) ---->  Gemini
-#                                                       |  reply: text (or more functionCalls -> loop again)
+# [server] interactions.create([question, ...model steps, function_result]) -->  Gemini
+#                                                       |  steps: text (or more function_calls -> loop again)
 #                                                       v
 #                                                 final answer`,
         },
@@ -233,7 +233,7 @@ export async function askGemini(question: string): Promise<string> {
           title: 'ההצהרה של getSetupBreakdown',
           ref: { file: 'lib/chat/tools/aggregations.ts', start: 'export const getSetupBreakdown', end: 'parameters: NO_PARAMS,' },
           notes: [
-            { match: "name: 'getSetupBreakdown',", text: 'השם מופיע פעמיים: פעם בשביל ה-registry שלנו (`byName`), ופעם בהצהרה — זה מה שהמודל יכתוב ב-`functionCall.name`. השניים חייבים להיות זהים.' },
+            { match: "name: 'getSetupBreakdown',", text: 'השם מופיע פעמיים: פעם בשביל ה-registry שלנו (`byName`), ופעם בהצהרה — זה מה שהמודל יכתוב ב-`name` של ה-`function_call`. השניים חייבים להיות זהים.' },
             { match: "'Server-computed performance per setup type", text: 'התיאור הוא ה-**prompt של הכלי**: לפיו המודל מחליט מתי לקרוא לו. הוא כתוב באנגלית, מסביר יחידות (`winRate` כשבר 0–1), מקרי קצה (`avgR` הוא `null` כשאין סטופ), ובעיקר מתי להשתמש: "Use this instead of counting rows yourself".' },
             { match: 'parameters: NO_PARAMS,', text: 'ה-schema של הארגומנטים. לכלי הזה אין ארגומנטים — אובייקט ריק. הוא תמיד מחשב על כל ההיקף.' },
           ],
@@ -275,28 +275,31 @@ export async function askGemini(question: string): Promise<string> {
         },
         {
           kind: 'text',
-          body: 'עכשיו הלולאה עצמה, ב-`callGeminiWithTools`. קודם יוצרים שיחה שבה ההצהרות רשומות:',
+          body: 'עכשיו הלולאה עצמה, ב-`callGeminiWithTools`. קודם ממירים את ההצהרות לכלים של ה-Interactions API ושולחים אותן עם כל בקשה:',
         },
         {
           kind: 'source',
-          title: 'שיחה עם כלים רשומים',
-          ref: { file: 'lib/chat/gemini-client.ts', start: 'const maxIterations = opts.maxIterations', lines: 13 },
+          title: 'בקשה עם כלים רשומים',
+          ref: { file: 'lib/chat/gemini-client.ts', start: 'const maxIterations = opts.maxIterations', end: 'throw new Error(' },
           notes: [
-            { match: 'tools: [{ functionDeclarations: tools.declarations }],', text: 'כל ההצהרות נשלחות עם **כל** בקשה בתור. המודל רואה את הרשימה המלאה ובוחר — או מחליט שלא צריך כלי בכלל ועונה ישר.' },
+            { match: 'const functionTools = tools.declarations.map(toFunctionTool)', text: 'כל הצהרה הופכת לכלי `{ type: \'function\', name, description, parameters }`. ה-schema שלנו כתוב עם ה-enum `Type` של ה-SDK (`OBJECT`), וה-Interactions API מתעד JSON Schema באותיות קטנות (`object`) — `toFunctionTool` מנמיך אותיות.' },
+            { match: 'input: [...input],', text: 'כל סיבוב שולח את **כל** התור עד עכשיו: ההיסטוריה, השאלה, ה-steps שהמודל החזיר ותוצאות הכלים. ההעתקה (`[...]`) מבטיחה שניסיון חוזר שולח בדיוק אותו קלט.' },
+            { match: 'tools: functionTools,', text: 'כל ההצהרות נשלחות עם **כל** בקשה בתור — ב-Interactions API, `tools` ו-`system_instruction` לא נשמרים בין בקשות. המודל רואה את הרשימה המלאה ובוחר — או מחליט שלא צריך כלי בכלל ועונה ישר.' },
           ],
         },
         {
           kind: 'source',
-          title: 'הלולאה: model → functionCalls → execute → functionResponse',
-          ref: { file: 'lib/chat/gemini-client.ts', start: 'const toolCalls: ToolLoopResult', end: 'message = pendingResponses' },
+          title: 'הלולאה: model → function_call → execute → function_result',
+          ref: { file: 'lib/chat/gemini-client.ts', start: 'const toolCalls: ToolLoopResult', end: '// Out of rounds' },
           notes: [
-            { match: 'const result = await send(message)', text: 'בסיבוב הראשון `message` הוא השאלה של המשתמש (טקסט). בסיבובים הבאים — מערך של תוצאות כלים.' },
-            { match: 'const calls = result.functionCalls ?? []', text: 'getter של ה-SDK שאוסף את כל חלקי ה-`functionCall` מהתשובה. יכולות להיות כמה קריאות בתשובה אחת (parallel function calling) — למשל פילוח לפי setup וגם לפי טיקר.' },
+            { match: 'const result = await send()', text: '`send` שולח את מערך ה-`input` כמו שהוא עכשיו. בסיבוב הראשון יש בו ההיסטוריה והשאלה; בכל סיבוב נוסף מתווספים אליו ה-steps של המודל ותוצאות הכלים.' },
+            { match: "const calls = steps.filter((s): s is Interactions.FunctionCallStep => s.type === 'function_call')", text: 'התשובה היא רשימת **steps**: מחשבות (`thought`), קריאות לכלים (`function_call`), טקסט (`model_output`). מסננים את הקריאות, עם type guard כדי ש-TypeScript ידע שיש להן `id`, `name` ו-`arguments`. יכולות להיות כמה קריאות בתשובה אחת (parallel function calling) — למשל פילוח לפי setup וגם לפי טיקר.' },
             { match: 'if (calls.length === 0) {', text: 'אין בקשות לכלים = המודל סיים לאסוף וכתב טקסט. זו היציאה הרגילה היחידה מהלולאה.' },
+            { match: 'input.push(...steps)', text: 'ה-steps של המודל חוזרים אליו **כמו שהם**, לפני התוצאות שלנו. ב-step של מחשבה יש `signature` — חתימה שמודלי 3.x בודקים כדי להמשיך את קו המחשבה. בלי שמירת מצב אצל Google, אנחנו אלה שצריכים להחזיר אותה.' },
             { match: 'response = await tools.execute(name, args)', text: '**כאן** הקוד שלנו רץ — בשרת שלנו, על הנתונים שה-route טען. זו השורה שעונה על "מי מריץ את הפונקציה".' },
             { match: "response = { error: error instanceof Error ? error.message : 'tool execution failed' }", text: 'executor שזרק לא מפיל את התור: השגיאה הופכת לתוצאה שהמודל יכול לקרוא ולעקוף.' },
-            { match: 'pendingResponses.push({ functionResponse: { id: call.id, name, response: { result: response } } })', text: 'התשובה לבקשה: part מסוג `functionResponse` עם אותו `id` ואותו `name` של הקריאה — מודלי 3.x דוחים תשובה בלי ה-`id` התואם. השדה `response` חייב להיות אובייקט, ולכן התוצאה עטופה ב-`{ result }`.' },
-            { match: 'message = pendingResponses', text: 'כל התוצאות של הסיבוב נשלחות יחד כהודעה אחת בסיבוב הבא. ה-SDK מאחד את כל ה-parts לתוכן אחד בתפקיד `user`.' },
+            { match: 'call_id: call.id,', text: 'התשובה לבקשה: step מסוג `function_result` עם `call_id` ששווה ל-`id` של הקריאה — מודלי 3.x דוחים תוצאה בלי ה-`id` התואם. כשיש כמה קריאות בסיבוב, ככה המודל יודע איזו תוצאה שייכת לאיזו.' },
+            { match: "result: [{ type: 'text', text: JSON.stringify({ result: response }) }],", text: 'התוצאה נשלחת כטקסט JSON, כמו בדוגמאות של Google. כל התוצאות של הסיבוב נכנסות ל-`input`, והן נשלחות יחד בסיבוב הבא.' },
           ],
         },
         {
@@ -304,9 +307,9 @@ export async function askGemini(question: string): Promise<string> {
           body: `נעקוב אחרי התור מההתחלה, עם השאלה "באיזה setup אני מרוויח הכי הרבה?":
 
 - **הכנה:** ההיקף גדול מ-\`CONTEXT_BUDGET_BYTES\` והמשתמש Pro, אז ה-route בונה \`runtime\` עם \`buildToolRuntime\`, ו-prompt מערכת שמונה את שמות הכלים.
-- **סיבוב 1:** \`send(question)\`. Gemini קורא את התיאור של \`getSetupBreakdown\` ("Use this ... whenever the question is about which setup performs best") ומחזיר \`functionCall\` עם \`args: {}\` — בלי טקסט.
+- **סיבוב 1:** \`send()\` עם השאלה. Gemini קורא את התיאור של \`getSetupBreakdown\` ("Use this ... whenever the question is about which setup performs best") ומחזיר step מסוג \`function_call\` עם \`arguments: {}\` — בלי טקסט.
 - **ביצוע:** \`calls.length === 1\`. השם נרשם ב-\`toolCalls\`, \`tools.execute\` מריץ את ה-executor על \`ctx.trades\` ומחזיר \`{ setups, totalTrades }\`.
-- **סיבוב 2:** \`send([functionResponse])\`. עכשיו למודל יש מספרים מדויקים, והוא כותב תשובה בעברית. \`calls.length === 0\`, הלולאה מחזירה \`{ text, toolCalls, usage, exhausted: false }\`.
+- **סיבוב 2:** \`send()\` שוב, עכשיו עם ה-steps של המודל וה-\`function_result\`. למודל יש מספרים מדויקים, והוא כותב תשובה בעברית. \`calls.length === 0\`, הלולאה מחזירה \`{ text, toolCalls, usage, exhausted: false }\`.
 - **סיום:** ה-route שומר את התשובה ב-\`AIConversation\` ומדפיס \`[chat] turn\` עם \`path: 'tools'\` ו-\`toolCalls: ['getSetupBreakdown']\`.
 
 כך נראית השיחה מנקודת המבט של Gemini בסוף התור (המספרים לדוגמה):`,
@@ -314,22 +317,15 @@ export async function askGemini(question: string): Promise<string> {
         {
           kind: 'snippet',
           lang: 'json',
-          title: 'ההיסטוריה שהמודל רואה (נתונים לדוגמה)',
+          title: 'ה-steps שהמודל רואה (נתונים לדוגמה)',
           code: `[
-  { "role": "user", "parts": [{ "text": "באיזה setup אני מרוויח הכי הרבה?" }] },
-  { "role": "model", "parts": [{ "functionCall": { "name": "getSetupBreakdown", "args": {} } }] },
-  { "role": "user", "parts": [{ "functionResponse": {
-      "name": "getSetupBreakdown",
-      "response": { "result": {
-        "setups": [
-          { "setupType": "Breakout", "tradeCount": 212, "winRate": 0.48, "avgR": 0.62 },
-          { "setupType": "Pullback", "tradeCount": 158, "winRate": 0.55, "avgR": 0.31 },
-          { "setupType": "untagged", "tradeCount": 90, "winRate": 0.41, "avgR": null }
-        ],
-        "totalTrades": 460
-      } }
-  } }] },
-  { "role": "model", "parts": [{ "text": "לפי R ממוצע, Breakout מוביל: 0.62R על 212 טריידים..." }] }
+  { "type": "user_input", "content": [{ "type": "text", "text": "באיזה setup אני מרוויח הכי הרבה?" }] },
+  { "type": "thought", "signature": "..." },
+  { "type": "function_call", "id": "call_1", "name": "getSetupBreakdown", "arguments": {} },
+  { "type": "function_result", "call_id": "call_1", "name": "getSetupBreakdown",
+    "result": [{ "type": "text", "text": "{\\"result\\":{\\"setups\\":[{\\"setupType\\":\\"Breakout\\",\\"tradeCount\\":212,\\"winRate\\":0.48,\\"avgR\\":0.62},{\\"setupType\\":\\"Pullback\\",\\"tradeCount\\":158,\\"winRate\\":0.55,\\"avgR\\":0.31},{\\"setupType\\":\\"untagged\\",\\"tradeCount\\":90,\\"winRate\\":0.41,\\"avgR\\":null}],\\"totalTrades\\":460}}" }] },
+  { "type": "thought", "signature": "..." },
+  { "type": "model_output", "content": [{ "type": "text", "text": "לפי R ממוצע, Breakout מוביל: 0.62R על 212 טריידים..." }] }
 ]`,
         },
         {
@@ -339,7 +335,7 @@ export async function askGemini(question: string): Promise<string> {
         },
         {
           kind: 'quiz',
-          question: 'Gemini החזיר `functionCalls` עם `getSetupBreakdown`. מי מריץ בפועל את הפונקציה?',
+          question: 'Gemini החזיר `function_call` עם `getSetupBreakdown`. מי מריץ בפועל את הפונקציה?',
           options: [
             'Gemini, בשרתים של Google — הוא קיבל את הקוד בהצהרה',
             'הדפדפן של המשתמש, שמחזיק את הטריידים',
@@ -347,7 +343,7 @@ export async function askGemini(question: string): Promise<string> {
             'ה-SDK מריץ אוטומטית כל פונקציה שהוצהרה',
           ],
           answer: 2,
-          explanation: 'ההצהרה מכילה רק שם, תיאור ו-schema — אין בה קוד. Gemini מחזיר JSON שאומר "תפעיל את X עם Y", והלולאה שלנו קוראת ל-`tools.execute`. ל-SDK יש מצב הפעלה אוטומטית לסוג מיוחד של כלים (`CallableTool`), אבל כאן מועברות הצהרות בלבד — שום דבר לא רץ בלי הקוד שלנו.',
+          explanation: 'ההצהרה מכילה רק שם, תיאור ו-schema — אין בה קוד. Gemini מחזיר JSON שאומר "תפעיל את X עם Y", והלולאה שלנו קוראת ל-`tools.execute`. ל-SDK יש מצב הפעלה אוטומטית של פונקציות (ב-Interactions API — רק ב-Python), אבל כאן מועברות הצהרות בלבד — שום דבר לא רץ בלי הקוד שלנו.',
         },
         {
           kind: 'text',
@@ -365,10 +361,11 @@ export async function askGemini(question: string): Promise<string> {
         {
           kind: 'source',
           title: 'כשנגמרו הסיבובים',
-          ref: { file: 'lib/chat/gemini-client.ts', start: '// Out of rounds with tool responses still unsent.', end: 'exhausted: true,' },
+          ref: { file: 'lib/chat/gemini-client.ts', start: '// Out of rounds with tool results still unanswered.', end: 'exhausted: true,' },
           notes: [
-            { match: 'const final = await send([...pendingResponses, { text: OUT_OF_ROUNDS_NUDGE }])', text: 'התוצאות של הסיבוב האחרון עוד לא נשלחו — שולחים אותן **יחד** עם ההודעה המכריחה, כדי שהתשובה תתבסס על כל מה שנאסף.' },
-            { match: "text: final.text ?? 'לא הצלחתי", text: 'הכלים עדיין רשומים, אז המודל עלול לבקש כלי נוסף. במקרה כזה אין טקסט (`text` הוא `undefined`), ומוחזרת הודעת fallback.' },
+            { match: 'input.push(textStep(\'user_input\', OUT_OF_ROUNDS_NUDGE))', text: 'התוצאות של הסיבוב האחרון כבר ב-`input` אבל עוד לא נשלחו — ההודעה המכריחה נוספת אחריהן, כך שהן נשלחות **יחד** והתשובה מתבססת על כל מה שנאסף.' },
+            { match: "tool_choice: 'none'", text: 'הכלים נשארים רשומים (הם חלק מהשיחה), אבל `tool_choice: \'none\'` אוסר על המודל לקרוא להם בסיבוב הזה — הוא חייב לענות בטקסט.' },
+            { match: "text: final.output_text || 'לא הצלחתי", text: 'רשת ביטחון: אם בכל זאת לא חזר טקסט (`output_text` ריק או `undefined`), מוחזרת הודעת fallback. כאן `||` ולא `??`, כדי לתפוס גם מחרוזת ריקה.' },
             { match: 'exhausted: true,', text: 'נרשם בלוג של התור — כך רואים כמה תורות נתקעו בתקרה.' },
           ],
         },
@@ -674,7 +671,7 @@ export function parseSetupDetailArgs(raw: Record<string, unknown>, mode: ChatCon
         },
         {
           kind: 'text',
-          body: `**חיפוש באינטרנט מול כלים.** ב-Gemini 2.5 (וההתנהגות נשמרה במעבר ל-3.x עד שתיבדק), בקשה שמכילה גם \`googleSearch\` וגם \`functionDeclarations\` נדחית. לכן תור הוא **או** עם כלים **או** עם חיפוש — לעולם לא שניהם.
+          body: `**חיפוש באינטרנט מול כלים.** ב-Gemini 2.5, בקשה שמכילה גם חיפוש באינטרנט וגם הצהרות על פונקציות נדחתה. לכן תור הוא **או** עם כלים **או** עם חיפוש — לעולם לא שניהם. מודלי 3.x ב-Interactions API כבר מקבלים את שניהם יחד (נבדק), אבל ההפרדה נשארה עד החלטת מוצר — עכשיו זו בחירה, לא מגבלה של ה-API.
 
 שימו לב לניסוח המדויק בקוד: זה "קריאה לכלים XOR אינטרנט", **לא** "נתונים XOR אינטרנט". בתור inline השורות והמדדים הם פשוט טקסט ב-prompt — אז תור עם חיפוש עדיין עונה מהנתונים של המשתמש.
 
@@ -759,8 +756,8 @@ export function chooseChatPath(p: { isPro: boolean; overThreshold: boolean }): {
   if (p.overThreshold && !p.isPro) return { path: 'blocked', webSearch: false }
 
   const path: ChatPath = p.overThreshold ? 'tools' : 'inline'
-  // Gemini rejects googleSearch together with functionDeclarations,
-  // so grounding is only offered on a Pro turn that registers no tools.
+  // Grounding is only offered on a Pro turn that registers no tools
+  // (a Gemini 2.5 limit, kept as a product choice on 3.x).
   return { path, webSearch: p.isPro && path === 'inline' }
 }
 
@@ -778,7 +775,7 @@ chooseChatPath({ isPro: true, overThreshold: false })  // { path: 'inline',  web
     {
       slug: 'ai-structured-output',
       title: 'פלט מובנה: JSON מהמודל, zod בשרת',
-      summary: 'איך יבוא ה-AI מקבל מ-Gemini JSON שקוד יכול לסמוך עליו: `responseMimeType`, ולידציה עם zod במקום `responseSchema`, ניסיון חוזר, הסלמה מ-Flash ל-Pro, ולמה אזור הזמן לעולם לא בא מהמודל.',
+      summary: 'איך יבוא ה-AI מקבל מ-Gemini JSON שקוד יכול לסמוך עליו: `response_format` עם `mime_type`, ולידציה עם zod במקום `schema`, ניסיון חוזר, הסלמה מ-Flash ל-Pro, ולמה אזור הזמן לעולם לא בא מהמודל.',
       minutes: 17,
       blocks: [
         {
@@ -787,8 +784,8 @@ chooseChatPath({ isPro: true, overThreshold: false })  // { path: 'inline',  web
 
 ל-Gemini יש שני מנגנונים לזה:
 
-- \`responseMimeType: 'application/json'\` — המודל מחויב להחזיר JSON תקין מבחינה תחבירית.
-- \`responseSchema\` — בנוסף, הפלט מוגבל ל-schema מסוים.
+- \`response_format: { type: 'text', mime_type: 'application/json' }\` — המודל מחויב להחזיר JSON תקין מבחינה תחבירית.
+- \`schema\` בתוך אותו \`response_format\` — בנוסף, הפלט מוגבל ל-JSON Schema מסוים.
 
 הפרויקט משתמש **רק בראשון**, ובודק את הצורה בעצמו עם zod:`,
         },
@@ -797,17 +794,17 @@ chooseChatPath({ isPro: true, overThreshold: false })  // { path: 'inline',  web
           title: 'JSON mode בקריאה',
           ref: { file: 'lib/trade/ai-import/extract.ts', start: 'function makeDefaultCall(' },
           notes: [
-            { match: "responseMimeType: 'application/json',", text: 'מבטיח JSON, לא מבטיח צורה. המודל עדיין יכול להחזיר אובייקט עם שדות לא נכונים — לכן תמיד ולידציה אחרי.' },
-            { match: 'thinkingLevel: ThinkingLevel.MEDIUM', text: 'אין כאן `temperature: 0`: מודלי 3.x מתעלמים מ-temperature, top_p ו-top_k. הדטרמיניזם בא מהוראות המערכת ומהוולידציה עם zod, וכאן רק מעלים את רמת החשיבה של Flash-Lite — קריאת גיליון מבולגן דורשת יותר מ-`minimal`.' },
+            { match: "response_format: { type: 'text', mime_type: 'application/json' },", text: 'מבטיח JSON, לא מבטיח צורה. המודל עדיין יכול להחזיר אובייקט עם שדות לא נכונים — לכן תמיד ולידציה אחרי.' },
+            { match: "thinking_level: 'medium'", text: 'אין כאן `temperature: 0`: מודלי 3.x מתעלמים מ-temperature, top_p ו-top_k. הדטרמיניזם בא מהוראות המערכת ומהוולידציה עם zod, וכאן רק מעלים את רמת החשיבה של Flash-Lite — קריאת גיליון מבולגן דורשת יותר מ-`minimal`.' },
             { match: 'withTimeout(', text: 'חילוץ ממוצע של יומן עם 30 טריידים לוקח בערך 73 שניות (המודל חושב לפני שהוא עונה), ולכן ה-timeout כאן הוא 4 דקות — מה שאי אפשר להריץ בתוך בקשה ב-Vercel. על זה בשיעור הבא.' },
           ],
         },
         {
           kind: 'source',
-          title: 'למה לא responseSchema',
+          title: 'למה בלי schema',
           ref: { file: 'lib/trade/ai-import/types.ts', start: 'The AI returns ONE of two shapes', end: 'server-side from the user' },
           notes: [
-            { match: 'responseSchema is intentionally NOT used', text: 'התשובה היא אחת משתי צורות (discriminated union), והתמיכה של Gemini ב-schema כזה שבירה. prompt ברור + JSON mode + zod — יציב יותר.' },
+            { match: 'a response_format schema is intentionally NOT used', text: 'התשובה היא אחת משתי צורות (discriminated union), והתמיכה של Gemini ב-schema כזה שבירה. prompt ברור + JSON mode + zod — יציב יותר.' },
             { match: 'fully testable', text: 'יתרון גדול: את ה-schema של zod אפשר לבדוק ב-vitest עם JSON מוכן, בלי לקרוא למודל בכלל.' },
             { match: '`timezone` is never part of the AI output', text: 'נגיע לזה בסוף השיעור.' },
           ],
@@ -947,12 +944,14 @@ export async function classifyNote(note: string): Promise<NoteMood> {
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const res = await genAI.models.generateContent({
+      const res = await genAI.interactions.create({
         model: 'gemini-3.5-flash-lite',
-        contents: note,
-        config: { systemInstruction: SYSTEM, responseMimeType: 'application/json' },
+        input: note,
+        system_instruction: SYSTEM,
+        response_format: { type: 'text', mime_type: 'application/json' },
+        store: false,
       })
-      const parsed = noteMoodSchema.safeParse(JSON.parse(stripCodeFence(res.text ?? '')))
+      const parsed = noteMoodSchema.safeParse(JSON.parse(stripCodeFence(res.output_text ?? '')))
       if (parsed.success) return parsed.data
       lastErr = new Error('ai_schema_mismatch: ' + (parsed.error.issues[0]?.message ?? 'invalid'))
     } catch (err) {

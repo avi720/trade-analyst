@@ -54,8 +54,10 @@ directories with knowledge the code doesn't make obvious get one:
 **Decisions** — [docs/decisions/](docs/decisions/) records things that are deliberately not
 built or deliberately off, so they don't get "fixed":
 [geo-gate.md](docs/decisions/geo-gate.md) (built, off on purpose — do not enable, and do not
-remove the `/api/cron/*` exclusion from the proxy matcher) and
-[captcha-dropped.md](docs/decisions/captcha-dropped.md).
+remove the `/api/cron/*` exclusion from the proxy matcher),
+[captcha-dropped.md](docs/decisions/captcha-dropped.md) and
+[gemini-conversation-state.md](docs/decisions/gemini-conversation-state.md) (Gemini
+Interactions calls stay stateless — no `previous_interaction_id`, `store: false`).
 
 ## Commands
 

@@ -31,11 +31,27 @@ unlabeled key leaks into answers. The system-prompt test fails on any unlabeled 
 - The in-scope set goes inline when it fits `CONTEXT_BUDGET_BYTES`; above that the turn runs the
   tool loop instead. The tool path is Pro-only — Free gets a 403 `context_too_large` asking to
   narrow the filter, not a silently truncated answer.
-- Gemini 2.5 rejected `googleSearch` together with `functionDeclarations` (not re-checked on 3.x), so web grounding is
-  offered only on Pro turns that register no tools. The system prompt tells the model which one
-  it has so it doesn't half-answer.
+- Web grounding is offered only on Pro turns that register no tools. That began as a Gemini 2.5
+  limit (search plus function declarations in one request was rejected). It is now a product
+  gate: 3.x on the Interactions API accepts `google_search` alongside function tools, verified
+  live on both models, stateless and stateful (2026-11-04). Lifting it is the owner's call, and
+  it means changing `webSearch` in the route, passing the search tool to `callGeminiWithTools`,
+  and rewriting the "one or the other" sections of `system-prompt.ts` together. The system
+  prompt tells the model which one it has so it doesn't half-answer.
 - Aggregation tools read `ctx.aggregates()` (`computeResearchAggregates`) so every number matches
   the research dashboard — don't re-derive metrics here; see `lib/utils/AGENTS.md`.
+
+## Gemini calls are stateless Interactions
+
+`gemini-client.ts` calls `genAI.interactions.create` with `store: false` and never uses
+`previous_interaction_id`. Each turn resends `AIConversation.messages` as `user_input` /
+`model_output` steps. Inside a tool-loop turn, the model's returned steps (thoughts, calls,
+signatures) go back verbatim ahead of our `function_result`s. The DB stays the only copy of a
+conversation, and the user's trade data isn't stored at Google. The reasoning, including a
+measured cache comparison, is in
+[docs/decisions/gemini-conversation-state.md](../../docs/decisions/gemini-conversation-state.md);
+don't switch to server-side state without revisiting it. `system_instruction`, `tools` and
+`generation_config` are per call in this API, never inherited.
 
 ## Timestamps are in the user's timezone
 
