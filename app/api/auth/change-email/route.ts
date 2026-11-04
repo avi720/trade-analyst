@@ -10,7 +10,7 @@ import type { Database } from "@/lib/db/types";
 
 const schema = z.object({
   currentPassword: z.string().min(1, "יש להזין את הסיסמה הנוכחית"),
-  newEmail: z.string().email("כתובת אימייל לא תקינה"),
+  newEmail: z.email("כתובת אימייל לא תקינה"),
 });
 
 export async function POST(req: NextRequest) {

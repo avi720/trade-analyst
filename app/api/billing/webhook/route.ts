@@ -11,7 +11,7 @@ import {
 } from '@/lib/billing/lemon-squeezy'
 import { logAuditEvent } from '@/lib/audit/log'
 
-const uuidSchema = z.string().uuid()
+const uuidSchema = z.guid()
 
 export async function POST(request: Request) {
   const config = getLemonSqueezyConfig()

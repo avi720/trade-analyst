@@ -7,7 +7,7 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const AI_IMPORT_BUCKET = 'ai-imports'
-const uuidSchema = z.string().uuid()
+const uuidSchema = z.guid()
 
 // GET /api/admin/jobs/[jobId] — returns the full job payload including
 // aiMapping / extractedLegs / parseErrors JSON blobs. Used by the detail modal.

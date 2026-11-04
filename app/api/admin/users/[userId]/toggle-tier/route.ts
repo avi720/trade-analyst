@@ -7,7 +7,7 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logAuditEvent } from '@/lib/audit/log'
 
-const uuidSchema = z.string().uuid()
+const uuidSchema = z.guid()
 
 const FAKE_RENEWAL_DAYS = 30
 
