@@ -81,19 +81,19 @@ export const aiTrack: Track = {
         },
         {
           kind: 'text',
-          body: `**בחירת מודל.** האתר משתמש בשני מודלים מסדרת 2.5:
+          body: `**בחירת מודל.** האתר משתמש בשני מודלים מסדרת 3.x:
 
-- \`gemini-2.5-flash\` — מהיר וזול. מספיק לרוב השאלות, ומשמש את מצב "חכם".
-- \`gemini-2.5-pro\` — חזק יותר בהסקה מורכבת, איטי ויקר יותר. משמש את מצב "עומק".
+- \`gemini-3.5-flash-lite\` — מהיר וזול. מספיק לרוב השאלות, ומשמש את מצב "חכם".
+- \`gemini-3.8-flash\` — חזק יותר בהסקה מורכבת, איטי ויקר יותר. משמש את מצב "עומק".
 
-שני המודלים "חושבים" לפני שהם עונים (thinking), וזה עולה טוקנים. ה-route לא בוחר מודל לפי המסלול של המשתמש אלא לפי **מצב השיחה**; המסלול רק קובע מי רשאי לבחור במצב "עומק" — כמה שורות קודם, \`contextMode === 'full'\` של משתמש Free נחסם עם \`proRequiredResponse('chat_pro_mode')\`.`,
+שני המודלים "חושבים" לפני שהם עונים (thinking), וזה עולה טוקנים. ב-Flash-Lite ברירת המחדל היא \`minimal\`, ולכן הקוד מעלה אותה ל-\`medium\` — אחרת הניתוח רדוד מדי. ה-route לא בוחר מודל לפי המסלול של המשתמש אלא לפי **מצב השיחה**; המסלול רק קובע מי רשאי לבחור במצב "עומק" — כמה שורות קודם, \`contextMode === 'full'\` של משתמש Free נחסם עם \`proRequiredResponse('chat_pro_mode')\`.`,
         },
         {
           kind: 'source',
           title: 'שורת בחירת המודל',
           ref: { file: 'app/api/chat/route.ts', start: 'const model = contextMode', lines: 1 },
           notes: [
-            { match: "'gemini-2.5-pro'", text: 'מצב `full` מגיע לכאן רק אחרי שבדיקת ה-Pro עברה, כך שבפועל: רק Pro יכול לקבל את מודל ה-Pro. משתמש Pro במצב "חכם" מקבל Flash.' },
+            { match: "'gemini-3.8-flash'", text: 'מצב `full` מגיע לכאן רק אחרי שבדיקת ה-Pro עברה, כך שבפועל: רק Pro יכול לקבל את מודל ה-Pro. משתמש Pro במצב "חכם" מקבל Flash.' },
           ],
         },
         {
@@ -112,7 +112,7 @@ export const aiTrack: Track = {
           notes: [
             { match: 'const u = result.usageMetadata', text: 'כל `GenerateContentResponse` נושא את הספירה של הבקשה הבודדת. תור עם כלים עושה כמה בקשות, ולכן הפונקציה **צוברת** — מקבלת את הסכום עד עכשיו ומחזירה סכום חדש.' },
             { match: 'cachedTokens: acc.cachedTokens + (u.cachedContentTokenCount ?? 0),', text: 'כל השדות אופציונליים ב-SDK, ולכן `?? 0`. שדה שחסר פשוט לא מוסיף.' },
-            { match: 'thoughtsTokens:', text: 'ב-2.5 החשיבה פועלת כברירת מחדל ומחויבת כפלט. תור שמבזבז על חשיבה יותר מאשר על התשובה — שווה לדעת עליו.' },
+            { match: 'thoughtsTokens:', text: 'טוקני חשיבה מחויבים כפלט. תור שמבזבז על חשיבה יותר מאשר על התשובה — שווה לדעת עליו.' },
           ],
         },
         {
@@ -127,7 +127,7 @@ export const aiTrack: Track = {
         {
           kind: 'callout',
           tone: 'tip',
-          body: '**Implicit caching**: מודלי 2.5 שומרים אוטומטית במטמון קידומות של prompt שחוזרות על עצמן, וטוקנים מהמטמון מחויבים בהנחה גדולה (ההערה בקוד מדברת על כ-90%). בשיחה עם חנן כל תור מתחיל באותן הוראות מערכת ובאותה היסטוריה, וההודעה החדשה בסוף — מבנה שמתאים בדיוק לזה. הפרויקט החליט **לא** לבנות שכבת מטמון משלו, ו-`cacheHitRatio` הוא הדרך לוודא שההחלטה מחזיקה. הכלל המעשי: מה שיציב — בתחילת ה-prompt; מה שמשתנה — בסוף.',
+          body: '**Implicit caching**: מודלי Gemini שומרים אוטומטית במטמון קידומות של prompt שחוזרות על עצמן, וטוקנים מהמטמון מחויבים בהנחה גדולה (ההערה בקוד מדברת על כ-90%). בשיחה עם חנן כל תור מתחיל באותן הוראות מערכת ובאותה היסטוריה, וההודעה החדשה בסוף — מבנה שמתאים בדיוק לזה. הפרויקט החליט **לא** לבנות שכבת מטמון משלו, ו-`cacheHitRatio` הוא הדרך לוודא שההחלטה מחזיקה. הכלל המעשי: מה שיציב — בתחילת ה-prompt; מה שמשתנה — בסוף.',
         },
         {
           kind: 'quiz',
@@ -143,7 +143,7 @@ export const aiTrack: Track = {
         },
         {
           kind: 'exercise',
-          prompt: 'כתבו פונקציית שרת `askGemini(question)` שקוראת ל-`gemini-2.5-flash` עם `generateContent` אחד, הוראת מערכת בעברית שמבקשת תשובה קצרה, ומדפיסה ללוג את ארבעת מוני הטוקנים (קלט, מטמון, פלט, חשיבה). החזירו את הטקסט, או מחרוזת ריקה אם אין.',
+          prompt: 'כתבו פונקציית שרת `askGemini(question)` שקוראת ל-`gemini-3.5-flash-lite` עם `generateContent` אחד, הוראת מערכת בעברית שמבקשת תשובה קצרה, ומדפיסה ללוג את ארבעת מוני הטוקנים (קלט, מטמון, פלט, חשיבה). החזירו את הטקסט, או מחרוזת ריקה אם אין.',
           hint: 'התבססו על `makeDefaultCall`. את המונים קוראים מ-`res.usageMetadata`, שכל השדות שלו אופציונליים.',
           solution: {
             lang: 'ts',
@@ -154,7 +154,7 @@ const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
 
 export async function askGemini(question: string): Promise<string> {
   const res = await genAI.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.5-flash-lite',
     contents: question,
     config: {
       systemInstruction: 'אתה עוזר קצר ומדויק. ענה בעברית, במשפט אחד או שניים.',
@@ -295,7 +295,7 @@ export async function askGemini(question: string): Promise<string> {
             { match: 'if (calls.length === 0) {', text: 'אין בקשות לכלים = המודל סיים לאסוף וכתב טקסט. זו היציאה הרגילה היחידה מהלולאה.' },
             { match: 'response = await tools.execute(name, args)', text: '**כאן** הקוד שלנו רץ — בשרת שלנו, על הנתונים שה-route טען. זו השורה שעונה על "מי מריץ את הפונקציה".' },
             { match: "response = { error: error instanceof Error ? error.message : 'tool execution failed' }", text: 'executor שזרק לא מפיל את התור: השגיאה הופכת לתוצאה שהמודל יכול לקרוא ולעקוף.' },
-            { match: 'pendingResponses.push({ functionResponse: { name, response: { result: response } } })', text: 'התשובה לבקשה: part מסוג `functionResponse` עם אותו `name`. השדה `response` חייב להיות אובייקט, ולכן התוצאה עטופה ב-`{ result }`.' },
+            { match: 'pendingResponses.push({ functionResponse: { id: call.id, name, response: { result: response } } })', text: 'התשובה לבקשה: part מסוג `functionResponse` עם אותו `id` ואותו `name` של הקריאה — מודלי 3.x דוחים תשובה בלי ה-`id` התואם. השדה `response` חייב להיות אובייקט, ולכן התוצאה עטופה ב-`{ result }`.' },
             { match: 'message = pendingResponses', text: 'כל התוצאות של הסיבוב נשלחות יחד כהודעה אחת בסיבוב הבא. ה-SDK מאחד את כל ה-parts לתוכן אחד בתפקיד `user`.' },
           ],
         },
@@ -674,7 +674,7 @@ export function parseSetupDetailArgs(raw: Record<string, unknown>, mode: ChatCon
         },
         {
           kind: 'text',
-          body: `**חיפוש באינטרנט מול כלים.** ב-Gemini 2.5, בקשה שמכילה גם \`googleSearch\` וגם \`functionDeclarations\` נדחית. לכן תור הוא **או** עם כלים **או** עם חיפוש — לעולם לא שניהם.
+          body: `**חיפוש באינטרנט מול כלים.** ב-Gemini 2.5 (וההתנהגות נשמרה במעבר ל-3.x עד שתיבדק), בקשה שמכילה גם \`googleSearch\` וגם \`functionDeclarations\` נדחית. לכן תור הוא **או** עם כלים **או** עם חיפוש — לעולם לא שניהם.
 
 שימו לב לניסוח המדויק בקוד: זה "קריאה לכלים XOR אינטרנט", **לא** "נתונים XOR אינטרנט". בתור inline השורות והמדדים הם פשוט טקסט ב-prompt — אז תור עם חיפוש עדיין עונה מהנתונים של המשתמש.
 
@@ -759,7 +759,7 @@ export function chooseChatPath(p: { isPro: boolean; overThreshold: boolean }): {
   if (p.overThreshold && !p.isPro) return { path: 'blocked', webSearch: false }
 
   const path: ChatPath = p.overThreshold ? 'tools' : 'inline'
-  // Gemini 2.5 rejects googleSearch together with functionDeclarations,
+  // Gemini rejects googleSearch together with functionDeclarations,
   // so grounding is only offered on a Pro turn that registers no tools.
   return { path, webSearch: p.isPro && path === 'inline' }
 }
@@ -798,8 +798,8 @@ chooseChatPath({ isPro: true, overThreshold: false })  // { path: 'inline',  web
           ref: { file: 'lib/trade/ai-import/extract.ts', start: 'function makeDefaultCall(' },
           notes: [
             { match: "responseMimeType: 'application/json',", text: 'מבטיח JSON, לא מבטיח צורה. המודל עדיין יכול להחזיר אובייקט עם שדות לא נכונים — לכן תמיד ולידציה אחרי.' },
-            { match: 'temperature: 0,', text: 'טמפרטורה 0 = הכי פחות אקראיות. כשהפלט הוא נתונים ולא ניסוח — רוצים את התשובה הכי סבירה, לא "יצירתית".' },
-            { match: 'withTimeout(', text: 'חילוץ ממוצע של יומן עם 30 טריידים לוקח בערך 73 שניות (Flash חושב לפני שהוא עונה), ולכן ה-timeout כאן הוא 4 דקות — מה שאי אפשר להריץ בתוך בקשה ב-Vercel. על זה בשיעור הבא.' },
+            { match: 'thinkingLevel: ThinkingLevel.MEDIUM', text: 'אין כאן `temperature: 0`: מודלי 3.x מתעלמים מ-temperature, top_p ו-top_k. הדטרמיניזם בא מהוראות המערכת ומהוולידציה עם zod, וכאן רק מעלים את רמת החשיבה של Flash-Lite — קריאת גיליון מבולגן דורשת יותר מ-`minimal`.' },
+            { match: 'withTimeout(', text: 'חילוץ ממוצע של יומן עם 30 טריידים לוקח בערך 73 שניות (המודל חושב לפני שהוא עונה), ולכן ה-timeout כאן הוא 4 דקות — מה שאי אפשר להריץ בתוך בקשה ב-Vercel. על זה בשיעור הבא.' },
           ],
         },
         {
@@ -878,9 +878,9 @@ chooseChatPath({ isPro: true, overThreshold: false })  // { path: 'inline',  web
           title: 'Flash קודם, Pro רק כשצריך',
           ref: { file: 'lib/trade/ai-import/extract.ts', start: 'let result = await callAndParse(', end: "if (result.mode === 'mapping') return result" },
           notes: [
-            { match: "'gemini-2.5-flash', retries, delayFn, budget)", text: 'תמיד מתחילים במודל הזול.' },
+            { match: "'gemini-3.5-flash-lite', retries, delayFn, budget)", text: 'תמיד מתחילים במודל הזול.' },
             { match: 'if (result.confidence < CONFIDENCE_FLOOR) {', text: 'אם המודל עצמו דיווח ביטחון נמוך מ-0.6 — ניסיון אחד על Pro.' },
-            { match: '// keep the flash result if the upgrade attempt fails', text: 'ההסלמה היא שיפור אופציונלי: אם Pro נכשל, נשארים עם תשובת Flash ולא מכשילים את כל העבודה.' },
+            { match: '// keep the Flash-Lite result if the upgrade attempt fails', text: 'ההסלמה היא שיפור אופציונלי: אם Pro נכשל, נשארים עם תשובת Flash ולא מכשילים את כל העבודה.' },
           ],
         },
         {
@@ -916,7 +916,7 @@ chooseChatPath({ isPro: true, overThreshold: false })  // { path: 'inline',  web
         },
         {
           kind: 'exercise',
-          prompt: 'כתבו `classifyNote(note)` שמסווגת הערת טרייד לאחד ממצבי הרוח `calm`, `fear`, `greed`, `revenge`, `unclear`, עם `confidence` בין 0 ל-1. השתמשו ב-JSON mode וב-temperature 0, ולדנו עם zod, והוסיפו ניסיון חוזר אחד על JSON שבור או על צורה לא נכונה. החזירו את הנתונים המאומתים או זרקו.',
+          prompt: 'כתבו `classifyNote(note)` שמסווגת הערת טרייד לאחד ממצבי הרוח `calm`, `fear`, `greed`, `revenge`, `unclear`, עם `confidence` בין 0 ל-1. השתמשו ב-JSON mode, ולדנו עם zod, והוסיפו ניסיון חוזר אחד על JSON שבור או על צורה לא נכונה. החזירו את הנתונים המאומתים או זרקו.',
           hint: 'בנו את זה כמו `callAndParse`: `JSON.parse` אחרי הסרת גדר הקוד (`stripCodeFence`), `safeParse`, ורק `SyntaxError` או אי-התאמה ל-schema שווים ניסיון נוסף.',
           solution: {
             lang: 'ts',
@@ -948,9 +948,9 @@ export async function classifyNote(note: string): Promise<NoteMood> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.5-flash-lite',
         contents: note,
-        config: { systemInstruction: SYSTEM, responseMimeType: 'application/json', temperature: 0 },
+        config: { systemInstruction: SYSTEM, responseMimeType: 'application/json' },
       })
       const parsed = noteMoodSchema.safeParse(JSON.parse(stripCodeFence(res.text ?? '')))
       if (parsed.success) return parsed.data

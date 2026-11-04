@@ -6,6 +6,7 @@ const mockCreate = vi.fn(() => ({ sendMessage: mockSendMessage }))
 
 vi.mock('@google/genai', () => ({
   GoogleGenAI: vi.fn(() => ({ chats: { create: mockCreate } })),
+  ThinkingLevel: { MEDIUM: 'MEDIUM' },
 }))
 
 // Import after mock setup
@@ -13,7 +14,7 @@ const { callGemini } = await import('@/lib/chat/gemini-client')
 
 const noDelay = async () => {}
 const systemPrompt = 'אתה חנן'
-const model = 'gemini-2.5-flash' as const
+const model = 'gemini-3.5-flash-lite' as const
 
 describe('callGemini', () => {
   beforeEach(() => {
@@ -55,9 +56,9 @@ describe('callGemini', () => {
 
   it('passes correct model name to chats.create', async () => {
     mockSendMessage.mockResolvedValueOnce({ text: 'ok' })
-    await callGemini([], 'שאלה', systemPrompt, 'gemini-2.5-pro', { retries: 5, delayFn: noDelay })
+    await callGemini([], 'שאלה', systemPrompt, 'gemini-3.8-flash', { retries: 5, delayFn: noDelay })
     expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'gemini-2.5-pro' })
+      expect.objectContaining({ model: 'gemini-3.8-flash' })
     )
   })
 
@@ -75,7 +76,7 @@ describe('callGemini', () => {
     const history: ChatMessage[] = [{ role: 'user', parts: [{ text: 'שאלה קודמת' }] }]
     await callGemini(history, 'שאלה חדשה', systemPrompt, model, { retries: 5, delayFn: noDelay })
     expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ history, config: { systemInstruction: systemPrompt } })
+      expect.objectContaining({ history, config: { systemInstruction: systemPrompt, thinkingConfig: { thinkingLevel: 'MEDIUM' } } })
     )
     expect(mockSendMessage).toHaveBeenCalledWith({ message: 'שאלה חדשה' })
   })
@@ -87,7 +88,7 @@ describe('callGemini', () => {
     await callGemini([], 'שאלה', systemPrompt, model, { retries: 5, delayFn: noDelay, webSearch: false })
     // An exact config match — any `tools` key would fail this.
     expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ config: { systemInstruction: systemPrompt } }),
+      expect.objectContaining({ config: { systemInstruction: systemPrompt, thinkingConfig: { thinkingLevel: 'MEDIUM' } } }),
     )
   })
 
@@ -95,7 +96,7 @@ describe('callGemini', () => {
     mockSendMessage.mockResolvedValueOnce({ text: 'ok' })
     await callGemini([], 'שאלה', systemPrompt, model, { retries: 5, delayFn: noDelay })
     expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ config: { systemInstruction: systemPrompt } }),
+      expect.objectContaining({ config: { systemInstruction: systemPrompt, thinkingConfig: { thinkingLevel: 'MEDIUM' } } }),
     )
   })
 

@@ -282,7 +282,7 @@ export async function POST(request: Request) {
     webSearch,
     timeZone,
   })
-  const model = contextMode === 'full' ? 'gemini-2.5-pro' : 'gemini-2.5-flash'
+  const model = contextMode === 'full' ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite'
 
   // Load or create conversation
   const convId = conversationId ?? crypto.randomUUID()

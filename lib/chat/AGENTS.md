@@ -14,8 +14,8 @@ per turn.
 
 What each mode may see is a product boundary, enforced in code:
 
-- **Smart** (Flash, Free + Pro): 7 fields. `openedAt` is withheld so entry-time analysis stays Pro.
-- **Full** (Pro, `gemini-2.5-pro`): adds `openedAt`, `executionQuality`, `emotionalState`.
+- **Smart** (`gemini-3.5-flash-lite`, Free + Pro): 7 fields. `openedAt` is withheld so entry-time analysis stays Pro.
+- **Full** (Pro, `gemini-3.8-flash`): adds `openedAt`, `executionQuality`, `emotionalState`.
 - **Free text** (`notes`, `didRight`, `wouldChange`) is never inline in either mode — reachable
   only through the `queryTrades` tool, opt-in even in Full.
 
@@ -31,7 +31,7 @@ unlabeled key leaks into answers. The system-prompt test fails on any unlabeled 
 - The in-scope set goes inline when it fits `CONTEXT_BUDGET_BYTES`; above that the turn runs the
   tool loop instead. The tool path is Pro-only — Free gets a 403 `context_too_large` asking to
   narrow the filter, not a silently truncated answer.
-- Gemini 2.5 rejects `googleSearch` together with `functionDeclarations`, so web grounding is
+- Gemini 2.5 rejected `googleSearch` together with `functionDeclarations` (not re-checked on 3.x), so web grounding is
   offered only on Pro turns that register no tools. The system prompt tells the model which one
   it has so it doesn't half-answer.
 - Aggregation tools read `ctx.aggregates()` (`computeResearchAggregates`) so every number matches

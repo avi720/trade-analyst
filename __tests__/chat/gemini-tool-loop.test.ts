@@ -5,6 +5,7 @@ const mockCreate = vi.fn(() => ({ sendMessage: mockSendMessage }))
 
 vi.mock('@google/genai', () => ({
   GoogleGenAI: vi.fn(() => ({ chats: { create: mockCreate } })),
+  ThinkingLevel: { MEDIUM: 'MEDIUM' },
   Type: { OBJECT: 'OBJECT', STRING: 'STRING', NUMBER: 'NUMBER', INTEGER: 'INTEGER' },
 }))
 
@@ -13,7 +14,7 @@ const { callGeminiWithTools, MAX_TOOL_ITERATIONS } = await import('@/lib/chat/ge
 type ToolExecute = import('@/lib/chat/gemini-client').ChatToolRuntime['execute']
 
 const noDelay = async () => {}
-const model = 'gemini-2.5-pro' as const
+const model = 'gemini-3.8-flash' as const
 
 const declarations = [
   { name: 'queryTrades', description: 'q', parameters: { type: Type.OBJECT, properties: {} } },
@@ -23,7 +24,7 @@ function textReply(text: string, usage?: Record<string, number>) {
   return { text, functionCalls: [], usageMetadata: usage }
 }
 function callReply(name: string, args: Record<string, unknown>, usage?: Record<string, number>) {
-  return { text: '', functionCalls: [{ name, args }], usageMetadata: usage }
+  return { text: '', functionCalls: [{ id: `call-${name}`, name, args }], usageMetadata: usage }
 }
 
 function run(
@@ -49,6 +50,20 @@ describe('callGeminiWithTools', () => {
         config: expect.objectContaining({ tools: [{ functionDeclarations: declarations }] }),
       }),
     )
+  })
+
+  it('raises Flash-Lite thinking to medium and leaves 3.8 Flash on its default', async () => {
+    mockSendMessage.mockResolvedValue(textReply('ok'))
+    await run()
+    expect(mockCreate).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      config: expect.objectContaining({ thinkingConfig: undefined }),
+    }))
+    await callGeminiWithTools([], 'שאלה', 'אתה חנן', 'gemini-3.5-flash-lite', {
+      declarations, execute: async () => ({}),
+    }, { delayFn: noDelay, retries: 0 })
+    expect(mockCreate).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      config: expect.objectContaining({ thinkingConfig: { thinkingLevel: 'MEDIUM' } }),
+    }))
   })
 
   it('returns immediately when the model answers without calling a tool', async () => {
@@ -78,6 +93,7 @@ describe('callGeminiWithTools', () => {
     expect(secondCall).toEqual([
       {
         functionResponse: {
+          id: 'call-queryTrades',
           name: 'queryTrades',
           response: { result: { rows: [{ ticker: 'AAPL' }], matched: 1 } },
         },

@@ -1,10 +1,25 @@
-import { GoogleGenAI, type FunctionDeclaration, type GenerateContentResponse } from '@google/genai'
+import {
+  GoogleGenAI,
+  ThinkingLevel,
+  type FunctionDeclaration,
+  type GenerateContentResponse,
+  type ThinkingConfig,
+} from '@google/genai'
 
 export type ChatMessage = { role: 'user' | 'model'; parts: [{ text: string }] }
 
-export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro'
+export type GeminiModel = 'gemini-3.5-flash-lite' | 'gemini-3.8-flash'
 
 const RETRY_DELAYS = [1000, 2000, 4000, 8000, 16000]
+
+/**
+ * Flash-Lite defaults to `minimal` thinking, which is too shallow for analysing a trade set or
+ * driving the tool loop — Google's migration guide asks for medium+ there. 3.8 Flash has no
+ * `minimal` level and its default already fits, so it is left alone.
+ */
+function thinkingConfigFor(model: GeminiModel): ThinkingConfig | undefined {
+  return model === 'gemini-3.5-flash-lite' ? { thinkingLevel: ThinkingLevel.MEDIUM } : undefined
+}
 
 /**
  * Token accounting for one chat turn, summed across every round-trip the turn
@@ -89,6 +104,7 @@ export async function callGemini(
         history,
         config: {
           systemInstruction: systemPrompt,
+          thinkingConfig: thinkingConfigFor(model),
           ...(webSearch ? { tools: [{ googleSearch: {} }] } : {}),
         },
       })
@@ -168,6 +184,7 @@ export async function callGeminiWithTools(
     history,
     config: {
       systemInstruction: systemPrompt,
+      thinkingConfig: thinkingConfigFor(model),
       tools: [{ functionDeclarations: tools.declarations }],
     },
   })
@@ -217,7 +234,8 @@ export async function callGeminiWithTools(
         console.error(`[gemini:tools] executor "${name}" threw:`, error)
         response = { error: error instanceof Error ? error.message : 'tool execution failed' }
       }
-      pendingResponses.push({ functionResponse: { name, response: { result: response } } })
+      // The 3.x models reject a FunctionResponse whose id does not echo its FunctionCall's.
+      pendingResponses.push({ functionResponse: { id: call.id, name, response: { result: response } } })
     }
     message = pendingResponses
   }
