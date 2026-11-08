@@ -1147,7 +1147,7 @@ export async function GET(
   }
 
   const { userId } = await params
-  if (!z.string().uuid().safeParse(userId).success) {
+  if (!z.guid().safeParse(userId).success) {
     return NextResponse.json({ error: 'Invalid userId' }, { status: 400 })
   }
 

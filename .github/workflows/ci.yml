@@ -1,0 +1,72 @@
+name: CI
+
+# Lint + typecheck + the full vitest suite (unit and integration) on every PR
+# to dev / main and on push to main. Push to dev is not a trigger: every dev
+# commit arrives through a PR, so it would run twice. Price: a push to a branch
+# with no open PR runs no CI. No path filters: these jobs are required status checks,
+# and a filtered-out run never reports, which would leave docs-only PRs stuck.
+# The integration suites hit the real DEV Supabase project (sssichkbdqariguvqprc) — never put production credentials in these secrets.
+# `next build` is not run here: Vercel already builds every push.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-static-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+
+  tests:
+    runs-on: ubuntu-latest
+    # Integration suites own fixed test-user UUIDs on the shared dev DB, so two
+    # CI runs must never overlap. Queue instead of cancelling an in-flight run.
+    concurrency:
+      group: ci-tests-dev-db
+      cancel-in-progress: false
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.DEV_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # The integration suites skip silently without these — in CI that would
+      # be a green run that tested nothing, so fail loudly instead.
+      - name: Require Supabase test credentials
+        run: |
+          for v in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::$v is empty (missing repo secret, or a fork PR)"; exit 1; fi
+          done
+      - run: npm run test:run
+
+  # Separate job (not a required check unless you add it): only production
+  # dependencies, so dev tooling advisories never fail a PR. A new advisory or
+  # a registry outage can still turn an unrelated PR red here.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - run: npm audit --omit=dev --audit-level=high

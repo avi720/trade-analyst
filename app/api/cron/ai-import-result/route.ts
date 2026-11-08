@@ -9,7 +9,7 @@ export const maxDuration = 30
 const legErrorSchema = z.object({ rowIndex: z.number().int(), reason: z.string() })
 
 const successSchema = z.object({
-  jobId: z.string().uuid(),
+  jobId: z.guid(),
   status: z.literal('AWAITING_CONFIRMATION'),
   aiMapping: z.record(z.string(), z.unknown()),
   extractedLegs: z.array(z.record(z.string(), z.unknown())),
@@ -18,7 +18,7 @@ const successSchema = z.object({
 })
 
 const failSchema = z.object({
-  jobId: z.string().uuid(),
+  jobId: z.guid(),
   status: z.literal('FAILED'),
   errorMessage: z.string().max(2000),
 })

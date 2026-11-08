@@ -11,7 +11,7 @@ jobs:
   watchdog:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4   # required to resolve the local composite action
+      - uses: actions/checkout@v6   # required to resolve the local composite action
       - name: Trigger AI-import watchdog
         uses: ./.github/actions/call-cron
         with:

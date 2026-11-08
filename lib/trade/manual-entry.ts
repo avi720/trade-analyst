@@ -23,9 +23,9 @@ export const manualLegSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
   time: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM'),
   side: z.enum(['BUY', 'SELL']),
-  quantity: z.number().finite().positive(),
-  price: z.number().finite().positive(),
-  commission: z.number().finite().min(0),
+  quantity: z.number().positive(),
+  price: z.number().positive(),
+  commission: z.number().min(0),
   currency: z.enum(CURRENCIES),
 
   commissionCurrency: z.enum(CURRENCIES).optional(),
@@ -37,8 +37,8 @@ export const manualLegSchema = z.object({
 
   setupType: z.string().max(80).nullable().optional(),
   emotionalState: z.string().max(40).nullable().optional(),
-  stopPrice: z.number().finite().positive().nullable().optional(),
-  targetPrice: z.number().finite().positive().nullable().optional(),
+  stopPrice: z.number().positive().nullable().optional(),
+  targetPrice: z.number().positive().nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
   didRight: z.string().max(4000).nullable().optional(),
   tags: z.array(z.string().max(TAG_MAX_LEN)).max(TAG_MAX_COUNT).nullable().optional(),

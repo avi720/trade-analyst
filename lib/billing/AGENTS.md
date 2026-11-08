@@ -17,7 +17,7 @@ shape it — don't "fix" either:
 
 - `past_due` → **Free immediately** (0-day dunning, 2026-07-07). The renewal already failed, so
   there is no paid period left, and LS's 14-day dunning window would otherwise hand out weeks of
-  `gemini-2.5-pro` chat for free.
+  `gemini-3.8-flash` chat for free.
 - `cancelled` → **Pro until `ends_at`** (2026-09-14). In LS, cancelled means "won't renew", not
   "access ended"; `subscription_expired` arrives at period end and downgrades.
 
