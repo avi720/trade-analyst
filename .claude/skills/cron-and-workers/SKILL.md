@@ -60,11 +60,12 @@ with `tsx`).
 
 - **Primary trigger** is on-demand `repository_dispatch` from the upload route (needs
   `AI_IMPORT_DISPATCH_TOKEN` / `AI_IMPORT_DISPATCH_REPO` in Vercel — processes within seconds).
-- The `*/30 * * * *` schedule is **only** a safety net for a silently-failed dispatch. It's
-  deliberately infrequent to save Actions minutes, since dispatch handles the common case.
+- The `40 */2 * * *` (every 2 h) schedule is **only** a safety net for a silently-failed dispatch. It's
+  deliberately infrequent to save Actions minutes (the repo is private, so they count against the
+  monthly quota), since dispatch handles the common case.
 - A `concurrency` guard prevents overlapping drains. Claims are atomic via the
   `claim_excel_import_job()` RPC (`FOR UPDATE SKIP LOCKED`).
-- **Watchdog** (`*/15`): fails jobs stuck in an in-flight state >15 min, setting
+- **Watchdog** (hourly, `10 * * * *`): fails jobs stuck in an in-flight state >15 min, setting
   `errorMessage='timeout_watchdog'`.
 - **Cleanup** (daily `0 3`): removes uploaded xlsx files for terminal jobs older than 7 days.
   The job row is kept as audit.

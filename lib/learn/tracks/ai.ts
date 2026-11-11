@@ -1027,7 +1027,7 @@ export async function classifyNote(note: string): Promise<NoteMood> {
           ref: { file: '.github/workflows/ai-import-worker.yml', start: 'on:', end: 'run: npx tsx scripts/process-ai-import-queue.ts' },
           notes: [
             { match: 'types: [ai-import-requested]', text: 'חייב להתאים ל-`event_type` שנשלח מ-`fireWorkerDispatch`. זה המסלול הראשי — עבודה מתחילה תוך שניות.' },
-            { match: "- cron: '*/30 * * * *'", text: 'רשת ביטחון: כל 30 דקות, למקרה שההערה נכשלה בשקט (token פג, עומס, רשת). במקרה הגרוע עבודה מחכה חצי שעה — אבל לא נתקעת לנצח.' },
+            { match: "- cron: '40 */2 * * *'", text: 'רשת ביטחון: כל שעתיים, למקרה שההערה נכשלה בשקט (token פג, עומס, רשת). במקרה הגרוע עבודה מחכה שעתיים — אבל לא נתקעת לנצח.' },
             { match: 'cancel-in-progress: false', text: 'לעולם לא שתי ריצות במקביל, ולא מבטלים ריצה באמצע עבודה — ריצה שנייה מחכה בתור.' },
             { match: 'GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}', text: 'שלושה secrets בלבד: כתובת האתר, `CRON_SECRET` ומפתח Gemini. **אין** כאן כתובת Supabase או מפתח service-role.' },
           ],
@@ -1104,7 +1104,7 @@ export async function classifyNote(note: string): Promise<NoteMood> {
         {
           kind: 'callout',
           tone: 'tip',
-          body: 'שני workflows נוספים מחזיקים את המערכת נקייה. **watchdog** (כל 15 דקות) מכשיל עם `timeout_watchdog` כל עבודה שתקועה ב-`PARSING` / `AI_MAPPING` / `IMPORTING` יותר מ-15 דקות — worker שקרס לא משאיר "מעבד..." נצחי. התקציב של `extract` הוא 12 דקות בדיוק כדי שעבודה איטית תיכשל עם `gemini_timeout` ברור לפני שה-watchdog מגיע. **cleanup** (כל יום ב-03:00 UTC) מוחק את קובץ ה-xlsx של עבודות סופיות בנות יותר מ-7 ימים, ומשאיר את השורה עם `aiMapping` ו-`extractedLegs` כתיעוד.',
+          body: 'שני workflows נוספים מחזיקים את המערכת נקייה. **watchdog** (פעם בשעה) מכשיל עם `timeout_watchdog` כל עבודה שתקועה ב-`PARSING` / `AI_MAPPING` / `IMPORTING` יותר מ-15 דקות — worker שקרס לא משאיר "מעבד..." נצחי. התקציב של `extract` הוא 12 דקות בדיוק כדי שעבודה איטית תיכשל עם `gemini_timeout` ברור לפני שה-watchdog מגיע. **cleanup** (כל יום ב-03:00 UTC) מוחק את קובץ ה-xlsx של עבודות סופיות בנות יותר מ-7 ימים, ומשאיר את השורה עם `aiMapping` ו-`extractedLegs` כתיעוד.',
         },
         {
           kind: 'quiz',

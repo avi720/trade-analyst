@@ -6,14 +6,15 @@ name: AI Import Worker
 # that's the primary path, so uploads are processed within seconds. The
 # schedule below is only the safety net for a silently-failed dispatch (PAT
 # revoked/expired, rate limit, network blip) — worst case a job waits up to
-# 30 min instead of being stuck forever. Kept infrequent to save Actions
-# minutes since dispatch already handles the common case.
+# 2 hours instead of being stuck forever. Kept infrequent to save Actions
+# minutes (the repo is private, so they count against the monthly quota)
+# since dispatch already handles the common case.
 on:
   repository_dispatch:
     types: [ai-import-requested]
   workflow_dispatch:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '40 */2 * * *'
 
 # Never run two drains at once — the second would just find an empty queue (or
 # contend on claims). Let an in-flight run finish rather than cancelling it.

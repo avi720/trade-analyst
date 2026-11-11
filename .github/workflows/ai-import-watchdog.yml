@@ -4,7 +4,7 @@ name: AI Import Watchdog
 # never shows an eternal "processing".
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '10 * * * *'   # hourly; a stuck job is failed within ~75 min
   workflow_dispatch:
 
 jobs:
