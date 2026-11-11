@@ -61,8 +61,8 @@ with `tsx`).
 - **Primary trigger** is on-demand `repository_dispatch` from the upload route (needs
   `AI_IMPORT_DISPATCH_TOKEN` / `AI_IMPORT_DISPATCH_REPO` in Vercel — processes within seconds).
 - The `40 */2 * * *` (every 2 h) schedule is **only** a safety net for a silently-failed dispatch. It's
-  deliberately infrequent to save Actions minutes (the repo is private, so they count against the
-  monthly quota), since dispatch handles the common case.
+  deliberately infrequent to save Actions minutes (and to stay within the private-repo quota if
+  the repo ever goes private), since dispatch handles the common case.
 - A `concurrency` guard prevents overlapping drains. Claims are atomic via the
   `claim_excel_import_job()` RPC (`FOR UPDATE SKIP LOCKED`).
 - **Watchdog** (hourly, `10 * * * *`): fails jobs stuck in an in-flight state >15 min, setting
