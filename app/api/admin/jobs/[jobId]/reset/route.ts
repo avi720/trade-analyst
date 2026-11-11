@@ -9,7 +9,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 const uuidSchema = z.guid()
 
 // POST /api/admin/jobs/[jobId]/reset — resets an ExcelImportJob back to
-// PENDING so the next worker drain (repository_dispatch or */30 schedule)
+// PENDING so the next worker drain (repository_dispatch or 2-hourly schedule)
 // re-claims it via claim_excel_import_job(). Clears errorMessage. Does NOT
 // re-fire repository_dispatch — the app has no GitHub PAT.
 export async function POST(

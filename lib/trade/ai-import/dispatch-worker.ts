@@ -4,7 +4,7 @@
  *
  * OPTIONAL: if AI_IMPORT_DISPATCH_TOKEN / AI_IMPORT_DISPATCH_REPO are not set,
  * this no-ops and the scheduled cron picks up the PENDING job instead (every
- * 30 min). When they ARE set, the job is processed within seconds of upload.
+ * 2 hours). When they ARE set, the job is processed within seconds of upload.
  * Never throws — a failed dispatch must not fail the upload; the cron is the
  * safety net.
  */

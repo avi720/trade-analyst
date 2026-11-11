@@ -8,7 +8,7 @@ const STUCK_AFTER_MINUTES = 15
 
 // POST /api/cron/ai-import-watchdog  (Bearer CRON_SECRET)
 // Fails jobs wedged in an in-flight state (worker crash / lost run) so they don't
-// hang forever. A self-correcting safety net — runs every 15 min.
+// hang forever. A self-correcting safety net — runs hourly.
 export async function POST(req: NextRequest) {
   if (!verifyCronSecret(req.headers.get('Authorization'))) {
     return new NextResponse('Unauthorized', { status: 401 })

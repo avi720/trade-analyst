@@ -80,7 +80,7 @@ Deferred out of Phase 1 (see Phases 2/3/4 below): AI-import jobs viewer, IBKR sy
 
 ### Context
 
-Pro users upload personal xlsx files that a Gemini-driven worker maps and extracts into `ManualLeg[]`s ([lib/trade/ai-import/](../../lib/trade/ai-import/)). The queue is off-Vercel — a GitHub-Actions worker (`.github/workflows/ai-import-worker.yml`) drains up to 5 jobs per run, primarily kicked by on-demand `repository_dispatch` from the upload route and secondarily by a `*/30` safety-net schedule. Users see their own jobs at `/manual-import` (via `GET /api/trades/ai-import`) but there is no owner-side view of the full `ExcelImportJob` queue.
+Pro users upload personal xlsx files that a Gemini-driven worker maps and extracts into `ManualLeg[]`s ([lib/trade/ai-import/](../../lib/trade/ai-import/)). The queue is off-Vercel — a GitHub-Actions worker (`.github/workflows/ai-import-worker.yml`) drains up to 5 jobs per run, primarily kicked by on-demand `repository_dispatch` from the upload route and secondarily by a 2-hourly (`40 */2 * * *`) safety-net schedule. Users see their own jobs at `/manual-import` (via `GET /api/trades/ai-import`) but there is no owner-side view of the full `ExcelImportJob` queue.
 
 When a job hangs or dies with an obscure error there is nothing but Supabase SQL to poke at. Phase 2 gives the owner a table across all users' jobs plus two mechanical recoveries: **reset** (put a broken/orphaned job back into `PENDING` so the worker re-claims it) and **delete** (drop the row + the xlsx from storage for junk uploads).
 
@@ -89,7 +89,7 @@ When a job hangs or dies with an obscure error there is nothing but Supabase SQL
 - **Introduce admin sub-tabs.** Phase 1 shipped a single-topic `/admin`; Phase 2 grows to two topics (users, jobs). The Phase 1 note "When Phase 2 adds jobs/BrokerEvent viewers, we'll lift `components/profile/profile-layout.tsx:40-190` into `components/admin/admin-layout.tsx` then" is the concrete design commitment: mirror the RTL vertical-sidebar tablist pattern. Same URL-driven activation, same aria-tablist keyboard handling.
 - **Migrate users list to `/admin/users`.** `/admin` becomes a redirect to `/admin/users` so the header "מנהל" tab keeps working. Users table logic is preserved verbatim — this is a route move, not a rewrite.
 - **Jobs list uses `createAdminClient()`** for the initial SSR fetch (needs to see all users' jobs, join to `User.email`). Reset and delete endpoints use it too; RLS on `ExcelImportJob` gets an additive `admins_select_all_excel_import_jobs` policy for parity when the owner wants to poke via SQL through the app's auth session.
-- **Reset semantics = requeue.** Reset sets `status='PENDING'`, `errorMessage=null`, `updatedAt=now`. The next worker drain (`*/30` schedule or dispatch) will re-claim the row through `claim_excel_import_job()` RPC (`FOR UPDATE SKIP LOCKED`). Reset does NOT re-fire `repository_dispatch` — that requires an owner-side GitHub PAT the app doesn't hold. The `*/30` cadence is fine for owner-driven recovery.
+- **Reset semantics = requeue.** Reset sets `status='PENDING'`, `errorMessage=null`, `updatedAt=now`. The next worker drain (2-hourly schedule or dispatch) will re-claim the row through `claim_excel_import_job()` RPC (`FOR UPDATE SKIP LOCKED`). Reset does NOT re-fire `repository_dispatch` — that requires an owner-side GitHub PAT the app doesn't hold. The 2-hourly cadence is fine for owner-driven recovery.
 - **Delete removes both DB row and the xlsx from storage.** The `ai-imports` bucket is private + user-scoped by RLS; the admin client bypasses that. Order: storage delete first (best-effort log-and-continue), then row delete. If the row lingers after a storage failure it can be re-deleted; leaving orphan bytes with no row would be harder to detect later.
 
 ### Phase 2 items
@@ -117,7 +117,7 @@ When a job hangs or dies with an obscure error there is nothing but Supabase SQL
 - [x] **B5. `POST /api/admin/jobs/[jobId]/reset` (new).**
   - **Where:** `app/api/admin/jobs/[jobId]/reset/route.ts`.
   - **Issue:** Jobs that die with `errorMessage='timeout_watchdog'` or with a Gemini quota error need to be re-queued for the worker. Manual UPDATE via SQL is slow and error-prone.
-  - **Acceptance:** `requireAdmin()` + UUID guard. `UPDATE ExcelImportJob SET status='PENDING', errorMessage=NULL, updatedAt=now() WHERE id=<jobId>`. Returns `{ id, status: 'PENDING' }`. Verified by resetting a real failed job (from B4's table), waiting for the next worker drain (≤30 min), and observing the job progress on the same table.
+  - **Acceptance:** `requireAdmin()` + UUID guard. `UPDATE ExcelImportJob SET status='PENDING', errorMessage=NULL, updatedAt=now() WHERE id=<jobId>`. Returns `{ id, status: 'PENDING' }`. Verified by resetting a real failed job (from B4's table), waiting for the next worker drain (≤2 h), and observing the job progress on the same table.
 
 - [x] **B6. `DELETE /api/admin/jobs/[jobId]` (new).**
   - **Where:** `app/api/admin/jobs/[jobId]/route.ts`.
@@ -132,7 +132,7 @@ When a job hangs or dies with an obscure error there is nothing but Supabase SQL
 - [x] **B8. Docs — extend the CLAUDE.md admin section.**
   - **Where:** [CLAUDE.md](../../CLAUDE.md), the "Admin panel" section added in Phase 1.
   - **Issue:** Fresh reader (or fresh Claude session) needs to know Phase 2 exists, that `/admin` now redirects to `/admin/users`, and the semantic of reset vs delete.
-  - **Acceptance:** New paragraph documents the AI-import jobs viewer, the reset (requeues) and delete (removes + storage cleanup) actions, and notes that reset does not re-fire the `repository_dispatch` — the `*/30` schedule handles it.
+  - **Acceptance:** New paragraph documents the AI-import jobs viewer, the reset (requeues) and delete (removes + storage cleanup) actions, and notes that reset does not re-fire the `repository_dispatch` — the 2-hourly schedule handles it.
 
 ### Phase 2 verification
 
